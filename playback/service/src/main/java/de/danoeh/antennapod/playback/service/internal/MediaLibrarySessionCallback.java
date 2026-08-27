@@ -344,7 +344,8 @@ public class MediaLibrarySessionCallback implements MediaLibraryService.MediaLib
             boolean fallbackToRecentEpisode) {
         SettableFuture<MediaSession.MediaItemsWithStartPosition> future = SettableFuture.create();
         Maybe.fromCallable(() -> {
-            FeedMedia media = DBReader.getFeedMedia(PlaybackPreferences.getCurrentlyPlayingFeedMediaId());
+            long mediaId = PlaybackPreferences.getCurrentlyPlayingFeedMediaId();
+            FeedMedia media = (mediaId != PlaybackPreferences.NO_MEDIA_PLAYING) ? DBReader.getFeedMedia(mediaId) : null;
             if (media == null) {
                 Log.d(TAG, "onPlaybackResumption: trying paused queue now");
                 List<FeedItem> recentQueue = DBReader.getPausedQueue(1);
