@@ -434,7 +434,10 @@ public class Media3PlaybackService extends MediaLibraryService {
                                     saveCurrentPosition();
                                     lastPositionSaveTime = currentTime;
                                 }
-                                if (SkipUtils.skipEndingIfNecessary(this, currentPlayable, position, duration, speed)) {
+                                long unselectedTarget = SkipUtils.getTargetPositionForUnselectedChapter(currentPlayable, position);
+                                if (unselectedTarget >= 0) {
+                                    player.seekTo(unselectedTarget);
+                                } else if (SkipUtils.skipEndingIfNecessary(this, currentPlayable, position, duration, speed)) {
                                     player.seekTo(player.getDuration());
                                 }
                             }

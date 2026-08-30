@@ -11,6 +11,7 @@ public class Chapter {
     private String link;
     private String imageUrl;
     private String chapterId;
+    private boolean unselected;
 
     public Chapter() {
     }
@@ -63,6 +64,14 @@ public class Chapter {
 
     public void setChapterId(String chapterId) {
         this.chapterId = chapterId;
+    }
+
+    public boolean isUnselected() {
+        return unselected;
+    }
+
+    public void setUnselected(boolean unselected) {
+        this.unselected = unselected;
     }
 
     @Override

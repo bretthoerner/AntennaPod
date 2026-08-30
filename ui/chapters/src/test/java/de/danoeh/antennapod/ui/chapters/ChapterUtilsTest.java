@@ -1,6 +1,8 @@
 package de.danoeh.antennapod.ui.chapters;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
 
@@ -19,6 +21,14 @@ import de.danoeh.antennapod.parser.media.MediaFormatDetector;
 
 @RunWith(RobolectricTestRunner.class)
 public class ChapterUtilsTest {
+
+    @Test
+    public void testChapterUnselectedDefaultAndSetter() {
+        Chapter chapter = new Chapter(0, "Title", "Link", "Image");
+        assertFalse(chapter.isUnselected());
+        chapter.setUnselected(true);
+        assertTrue(chapter.isUnselected());
+    }
 
     @Test
     public void testMimeMpeg_selectsId3() {

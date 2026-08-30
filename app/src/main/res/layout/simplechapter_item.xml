@@ -10,13 +10,22 @@
     android:baselineAligned="false"
     android:descendantFocusability="blocksDescendants">
 
+    <CheckBox
+        android:id="@+id/chkSelected"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="16dp"
+        android:layout_marginStart="16dp"
+        android:focusable="false"
+        android:focusableInTouchMode="false" />
+
     <ImageView
         android:id="@+id/imgvCover"
         android:layout_width="@dimen/thumbnail_length_queue_item"
         android:layout_height="@dimen/thumbnail_length_queue_item"
         android:importantForAccessibility="no"
-        android:layout_marginLeft="16dp"
-        android:layout_marginStart="16dp"
+        android:layout_marginLeft="8dp"
+        android:layout_marginStart="8dp"
         tools:src="@tools:sample/avatars" />
 
     <LinearLayout

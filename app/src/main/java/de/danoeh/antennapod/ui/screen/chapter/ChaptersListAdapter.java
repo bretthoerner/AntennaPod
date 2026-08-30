@@ -5,6 +5,7 @@ import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.CheckBox;
 import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
@@ -89,6 +90,12 @@ public class ChaptersListAdapter extends RecyclerView.Adapter<ChaptersListAdapte
             }
         });
 
+        holder.checkBox.setOnCheckedChangeListener(null);
+        holder.checkBox.setChecked(!sc.isUnselected());
+        holder.checkBox.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            sc.setUnselected(!isChecked);
+        });
+
         if (position == currentChapterIndex) {
             float density = context.getResources().getDisplayMetrics().density;
             holder.itemView.setBackgroundColor(SurfaceColors.getColorForElevation(context, 32 * density));
@@ -153,6 +160,7 @@ public class ChaptersListAdapter extends RecyclerView.Adapter<ChaptersListAdapte
         final TextView link;
         final TextView duration;
         final ImageView image;
+        final CheckBox checkBox;
         final View secondaryActionButton;
         final ImageView secondaryActionIcon;
         final CircularProgressBar progressBar;
@@ -163,6 +171,7 @@ public class ChaptersListAdapter extends RecyclerView.Adapter<ChaptersListAdapte
             start = itemView.findViewById(R.id.txtvStart);
             link = itemView.findViewById(R.id.txtvLink);
             image = itemView.findViewById(R.id.imgvCover);
+            checkBox = itemView.findViewById(R.id.chkSelected);
             duration = itemView.findViewById(R.id.txtvDuration);
             secondaryActionButton = itemView.findViewById(R.id.secondaryActionButton);
             secondaryActionIcon = itemView.findViewById(R.id.secondaryActionIcon);

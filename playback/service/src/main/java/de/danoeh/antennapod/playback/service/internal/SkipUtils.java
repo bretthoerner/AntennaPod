@@ -3,7 +3,10 @@ package de.danoeh.antennapod.playback.service.internal;
 import android.content.Context;
 import android.util.Log;
 import de.danoeh.antennapod.event.MessageEvent;
+import de.danoeh.antennapod.model.feed.Chapter;
 import de.danoeh.antennapod.model.feed.FeedMedia;
+import de.danoeh.antennapod.model.playback.Playable;
+import java.util.List;
 import de.danoeh.antennapod.model.feed.FeedPreferences;
 import de.danoeh.antennapod.playback.service.R;
 import org.greenrobot.eventbus.EventBus;
@@ -43,6 +46,30 @@ public final class SkipUtils {
      * Returns true and notifies the user if the ending should be
      * skipped given the current position, duration and playback speed.
      */
+    public static long getTargetPositionForUnselectedChapter(Playable playable, long currentPosition) {
+        if (playable == null || playable.getChapters() == null || playable.getChapters().isEmpty()) {
+            return -1;
+        }
+        List<Chapter> chapters = playable.getChapters();
+        int currentIdx = Chapter.getAfterPosition(chapters, (int) currentPosition);
+        if (currentIdx < 0 || currentIdx >= chapters.size()) {
+            return -1;
+        }
+        Chapter currentChapter = chapters.get(currentIdx);
+        if (currentChapter.isUnselected()) {
+            // Find next selected chapter start
+            for (int i = currentIdx + 1; i < chapters.size(); i++) {
+                Chapter next = chapters.get(i);
+                if (!next.isUnselected()) {
+                    return next.getStart();
+                }
+            }
+            // If all subsequent chapters are unselected, return playable duration or end of current episode
+            return playable.getDuration() > 0 ? playable.getDuration() : -1;
+        }
+        return -1;
+    }
+
     public static boolean skipEndingIfNecessary(Context context, FeedMedia media,
                                                 long position, long duration, float speed) {
         if (media.getItem() == null || media.getItem().getFeed() == null

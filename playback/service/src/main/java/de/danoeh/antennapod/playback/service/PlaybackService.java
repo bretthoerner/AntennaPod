@@ -61,6 +61,7 @@ import de.danoeh.antennapod.playback.service.internal.ClockSleepTimer;
 import de.danoeh.antennapod.playback.service.internal.EpisodeSleepTimer;
 import de.danoeh.antennapod.playback.service.internal.LocalPSMP;
 import de.danoeh.antennapod.playback.service.internal.PlayableUtils;
+import de.danoeh.antennapod.playback.service.internal.SkipUtils;
 import de.danoeh.antennapod.playback.service.internal.PlaybackServiceNotificationBuilder;
 import de.danoeh.antennapod.playback.service.internal.PlaybackServiceStateManager;
 import de.danoeh.antennapod.playback.service.internal.PlaybackServiceTaskManager;
@@ -1862,7 +1863,12 @@ public class PlaybackService extends MediaBrowserServiceCompat {
                             notificationManager.notify(R.id.notification_playing, notificationBuilder.build());
                         }
                     }
-                    skipEndingIfNecessary();
+                    long unselectedTarget = SkipUtils.getTargetPositionForUnselectedChapter(getPlayable(), getCurrentPosition());
+                    if (unselectedTarget >= 0) {
+                        seekTo((int) unselectedTarget);
+                    } else {
+                        skipEndingIfNecessary();
+                    }
                 });
     }
 
