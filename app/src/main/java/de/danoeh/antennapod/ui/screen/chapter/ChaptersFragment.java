@@ -136,8 +136,29 @@ public class ChaptersFragment extends AppCompatDialogFragment {
         if (disposable != null) {
             disposable.dispose();
         }
-        disposable = Maybe.create(emitter -> {
-            Playable media = DBReader.getFeedMedia(PlaybackPreferences.getCurrentlyPlayingFeedMediaId());
+        disposable = Maybe.<Playable>create(emitter -> {
+            Playable media = null;
+            if (PlaybackService.isRunning) {
+                PlaybackController.bindToService(getActivity(), service -> {
+                    Playable serviceMedia = service.getPlayable();
+                    if (serviceMedia != null) {
+                        ChapterUtils.loadChapters(serviceMedia, getContext(), forceRefresh);
+                        emitter.onSuccess(serviceMedia);
+                    } else {
+                        Playable dbMedia = DBReader.getFeedMedia(PlaybackPreferences.getCurrentlyPlayingFeedMediaId());
+                        if (dbMedia != null) {
+                            ChapterUtils.loadChapters(dbMedia, getContext(), forceRefresh);
+                            emitter.onSuccess(dbMedia);
+                        } else {
+                            emitter.onComplete();
+                        }
+                    }
+                });
+                return;
+            } else {
+                media = DBReader.getFeedMedia(PlaybackPreferences.getCurrentlyPlayingFeedMediaId());
+            }
+
             if (media != null) {
                 ChapterUtils.loadChapters(media, getContext(), forceRefresh);
                 emitter.onSuccess(media);

@@ -13,6 +13,7 @@ import de.danoeh.antennapod.model.feed.FeedMedia;
 import de.danoeh.antennapod.net.common.AntennapodHttpClient;
 import de.danoeh.antennapod.parser.media.MediaFormatDetector;
 import de.danoeh.antennapod.storage.database.DBReader;
+import de.danoeh.antennapod.storage.preferences.PlaybackPreferences;
 import de.danoeh.antennapod.parser.feed.PodcastIndexChapterParser;
 import de.danoeh.antennapod.parser.media.id3.ChapterReader;
 import de.danoeh.antennapod.parser.media.id3.ID3ReaderException;
@@ -79,12 +80,42 @@ public class ChapterUtils {
                 // Do not try loading again. There are no chapters or parsing failed.
                 playable.setChapters(Collections.emptyList());
             } else {
+                restoreUnselectedState(playable, chapters);
                 playable.setChapters(chapters);
             }
         } catch (InterruptedIOException e) {
             Log.d(TAG, "Chapter loading interrupted");
             playable.setChapters(null); // Allow later retry
         }
+    }
+
+    public static void restoreUnselectedState(Playable playable, List<Chapter> chapters) {
+        if (playable == null || chapters == null || playable.getIdentifier() == null) {
+            return;
+        }
+        java.util.Set<String> unselectedSet = PlaybackPreferences.getUnselectedChapters(
+                String.valueOf(playable.getIdentifier()));
+        if (unselectedSet.isEmpty()) {
+            return;
+        }
+        for (Chapter chapter : chapters) {
+            if (unselectedSet.contains(String.valueOf(chapter.getStart()))) {
+                chapter.setUnselected(true);
+            }
+        }
+    }
+
+    public static void saveUnselectedState(Playable playable) {
+        if (playable == null || playable.getChapters() == null || playable.getIdentifier() == null) {
+            return;
+        }
+        java.util.Set<String> unselectedSet = new java.util.HashSet<>();
+        for (Chapter chapter : playable.getChapters()) {
+            if (chapter.isUnselected()) {
+                unselectedSet.add(String.valueOf(chapter.getStart()));
+            }
+        }
+        PlaybackPreferences.setUnselectedChapters(String.valueOf(playable.getIdentifier()), unselectedSet);
     }
 
     public static List<Chapter> loadChaptersFromMediaFile(Playable playable, Context context)

@@ -51,6 +51,26 @@ public class SkipUtilsTest {
     }
 
     @Test
+    public void testGetTargetPositionForUnselectedChapter_consecutiveUnselectedChapters() {
+        Playable playable = mock(Playable.class);
+        List<Chapter> chapters = new ArrayList<>();
+        Chapter ch1 = new Chapter(0, "Ch 1", "", "");
+        Chapter ch2 = new Chapter(10000, "Ch 2", "", "");
+        ch2.setUnselected(true);
+        Chapter ch3 = new Chapter(20000, "Ch 3", "", "");
+        ch3.setUnselected(true);
+        Chapter ch4 = new Chapter(30000, "Ch 4", "", "");
+        chapters.add(ch1);
+        chapters.add(ch2);
+        chapters.add(ch3);
+        chapters.add(ch4);
+        when(playable.getChapters()).thenReturn(chapters);
+
+        // Position in Ch 2 (unselected) should skip past Ch 3 (also unselected) to Ch 4 (30000)
+        assertEquals(30000, SkipUtils.getTargetPositionForUnselectedChapter(playable, 12000));
+    }
+
+    @Test
     public void testGetTargetPositionForUnselectedChapter_lastChapterUnselected() {
         Playable playable = mock(Playable.class);
         List<Chapter> chapters = new ArrayList<>();

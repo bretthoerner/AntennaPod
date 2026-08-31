@@ -165,6 +165,21 @@ public abstract class PlaybackPreferences {
         editor.apply();
     }
 
+    public static java.util.Set<String> getUnselectedChapters(String mediaIdentifier) {
+        if (prefs == null || mediaIdentifier == null) {
+            return java.util.Collections.emptySet();
+        }
+        return prefs.getStringSet("unselected_chapters_" + mediaIdentifier, java.util.Collections.emptySet());
+    }
+
+    public static void setUnselectedChapters(String mediaIdentifier, java.util.Set<String> unselectedChapters) {
+        if (prefs == null || mediaIdentifier == null) {
+            return;
+        }
+        prefs.edit().putStringSet("unselected_chapters_" + mediaIdentifier,
+                new java.util.HashSet<>(unselectedChapters)).apply();
+    }
+
     public static void clearCurrentlyPlayingTemporaryPlaybackSettings() {
         SharedPreferences.Editor editor = prefs.edit();
         editor.remove(PREF_CURRENTLY_PLAYING_TEMPORARY_PLAYBACK_SPEED);
