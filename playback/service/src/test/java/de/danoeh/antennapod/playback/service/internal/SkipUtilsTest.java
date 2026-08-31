@@ -85,4 +85,24 @@ public class SkipUtilsTest {
         // Position in Ch 2 (unselected, last chapter) should jump to duration (30000)
         assertEquals(30000, SkipUtils.getTargetPositionForUnselectedChapter(playable, 15000));
     }
+
+    @Test
+    public void testSeekTargetAdjustmentIntoUnselectedChapter() {
+        Playable playable = mock(Playable.class);
+        List<Chapter> chapters = new ArrayList<>();
+        Chapter ch1 = new Chapter(0, "Ch 1", "", "");
+        Chapter ch2 = new Chapter(10000, "Ch 2", "", "");
+        ch2.setUnselected(true);
+        Chapter ch3 = new Chapter(20000, "Ch 3", "", "");
+        chapters.add(ch1);
+        chapters.add(ch2);
+        chapters.add(ch3);
+        when(playable.getChapters()).thenReturn(chapters);
+
+        // Fast-forward / seeking from 5000 + 6000 = 11000 (which falls into unselected Ch 2)
+        // should redirect target to 20000 (start of Ch 3)
+        long seekTargetPosition = 11000;
+        long adjustedTarget = SkipUtils.getTargetPositionForUnselectedChapter(playable, seekTargetPosition);
+        assertEquals(20000, adjustedTarget);
+    }
 }

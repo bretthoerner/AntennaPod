@@ -184,9 +184,14 @@ public class Media3PlaybackService extends MediaLibraryService {
 
             @Override
             public void seekTo(long positionMs) {
-                super.seekTo(positionMs);
+                long target = positionMs;
+                long unselectedTarget = SkipUtils.getTargetPositionForUnselectedChapter(currentPlayable, target);
+                if (unselectedTarget >= 0) {
+                    target = unselectedTarget;
+                }
+                super.seekTo(target);
                 EventBus.getDefault().post(
-                        new PlaybackPositionEvent((int) positionMs, (int) player.getDuration()));
+                        new PlaybackPositionEvent((int) target, (int) player.getDuration()));
             }
         };
         player.addListener(playerListener);
