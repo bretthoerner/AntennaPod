@@ -122,6 +122,8 @@ public abstract class UserPreferences {
     // Mediaplayer
     private static final String PREF_PLAYBACK_SPEED = "prefPlaybackSpeed";
     public static final String PREF_PLAYBACK_SKIP_SILENCE = "prefSkipSilence";
+    public static final String PREF_SKIP_SILENCE_STRENGTH = "prefSkipSilenceStrength";
+    public static final int SKIP_SILENCE_STRENGTH_DEFAULT = 4;
     private static final String PREF_FAST_FORWARD_SECS = "prefFastForwardSecs";
     private static final String PREF_REWIND_SECS = "prefRewindSecs";
     private static final String PREF_QUEUE_LOCKED = "prefQueueLocked";
@@ -470,6 +472,13 @@ public abstract class UserPreferences {
         return prefs.getBoolean(PREF_PLAYBACK_SKIP_SILENCE, false);
     }
 
+    public static int getSkipSilenceStrength() {
+        if (prefs == null) {
+            return SKIP_SILENCE_STRENGTH_DEFAULT;
+        }
+        return prefs.getInt(PREF_SKIP_SILENCE_STRENGTH, SKIP_SILENCE_STRENGTH_DEFAULT);
+    }
+
     public static List<Float> getPlaybackSpeedArray() {
         return readPlaybackSpeedArray(prefs.getString(PREF_PLAYBACK_SPEED_ARRAY, null));
     }
@@ -640,6 +649,12 @@ public abstract class UserPreferences {
 
     public static void setSkipSilence(boolean skipSilence) {
         prefs.edit().putBoolean(PREF_PLAYBACK_SKIP_SILENCE, skipSilence).apply();
+    }
+
+    public static void setSkipSilenceStrength(int strength) {
+        if (prefs != null) {
+            prefs.edit().putInt(PREF_SKIP_SILENCE_STRENGTH, strength).apply();
+        }
     }
 
     public static void setPlaybackSpeedArray(List<Float> speeds) {
