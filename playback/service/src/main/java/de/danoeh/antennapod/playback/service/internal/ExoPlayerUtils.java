@@ -3,6 +3,7 @@ package de.danoeh.antennapod.playback.service.internal;
 import android.content.Context;
 import android.net.Uri;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.OptIn;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
@@ -18,6 +19,10 @@ import androidx.media3.datasource.ResolvingDataSource;
 import androidx.media3.datasource.cache.CacheDataSource;
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor;
 import androidx.media3.datasource.cache.SimpleCache;
+import androidx.media3.exoplayer.DefaultRenderersFactory;
+import androidx.media3.exoplayer.RenderersFactory;
+import androidx.media3.exoplayer.audio.AudioSink;
+import androidx.media3.exoplayer.audio.DefaultAudioSink;
 import de.danoeh.antennapod.net.common.RedirectChecker;
 import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -45,12 +50,30 @@ public class ExoPlayerUtils {
 
     @OptIn(markerClass = UnstableApi.class)
     public static ExoPlayer buildPlayer(Context context) {
+        return buildPlayer(context, new ConfigurableSilenceSkippingAudioProcessor());
+    }
+
+    @OptIn(markerClass = UnstableApi.class)
+    public static ExoPlayer buildPlayer(Context context,
+            ConfigurableSilenceSkippingAudioProcessor silenceProcessor) {
         if (simpleCache == null) {
             simpleCache = new SimpleCache(new File(context.getCacheDir(), "streaming"),
                     new LeastRecentlyUsedCacheEvictor(100 * 1024 * 1024),
                     new StandaloneDatabaseProvider(context));
         }
-        return new ExoPlayer.Builder(context)
+        RenderersFactory renderersFactory = new DefaultRenderersFactory(context) {
+            @Override
+            @Nullable
+            protected AudioSink buildAudioSink(
+                    Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
+                return new DefaultAudioSink.Builder(context)
+                        .setEnableFloatOutput(enableFloatOutput)
+                        .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+                        .setAudioProcessorChain(new AntennaPodAudioProcessorChain(silenceProcessor))
+                        .build();
+            }
+        };
+        return new ExoPlayer.Builder(context, renderersFactory)
                 .setLoadControl(new DefaultLoadControl.Builder()
                         .setBufferDurationsMs(
                                 (int) TimeUnit.HOURS.toMillis(1),

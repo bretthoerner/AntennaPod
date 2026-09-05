@@ -8,6 +8,8 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.CheckBox;
+import android.widget.SeekBar;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -45,6 +47,9 @@ public class VariableSpeedDialog extends BottomSheetDialogFragment {
     private PlaybackSpeedSeekBar speedSeekBar;
     private Chip addCurrentSpeedChip;
     private CheckBox skipSilenceCheckbox;
+    private View skipSilenceStrengthContainer;
+    private TextView skipSilenceStrengthLabel;
+    private SeekBar skipSilenceStrengthSeekBar;
     private Disposable disposable;
 
     public VariableSpeedDialog() {
@@ -109,6 +114,32 @@ public class VariableSpeedDialog extends BottomSheetDialogFragment {
 
     public void updateSkipSilence(boolean skipSilence) {
         skipSilenceCheckbox.setChecked(skipSilence);
+        if (skipSilenceStrengthContainer != null) {
+            skipSilenceStrengthContainer.setVisibility(skipSilence ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    private void updateSkipSilenceStrengthLabel(int strength) {
+        int stringRes;
+        switch (strength) {
+            case 1:
+                stringRes = R.string.skip_silence_strength_1;
+                break;
+            case 2:
+                stringRes = R.string.skip_silence_strength_2;
+                break;
+            case 3:
+                stringRes = R.string.skip_silence_strength_3;
+                break;
+            case 5:
+                stringRes = R.string.skip_silence_strength_5;
+                break;
+            case 4:
+            default:
+                stringRes = R.string.skip_silence_strength_4;
+                break;
+        }
+        skipSilenceStrengthLabel.setText(getString(R.string.pref_skip_silence_strength_title, getString(stringRes)));
     }
 
     @Nullable
@@ -142,8 +173,42 @@ public class VariableSpeedDialog extends BottomSheetDialogFragment {
 
         skipSilenceCheckbox = root.findViewById(R.id.skipSilence);
         skipSilenceCheckbox.setChecked(UserPreferences.isSkipSilence());
+        skipSilenceStrengthContainer = root.findViewById(R.id.skipSilenceStrengthContainer);
+        skipSilenceStrengthLabel = root.findViewById(R.id.skipSilenceStrengthLabel);
+        skipSilenceStrengthSeekBar = root.findViewById(R.id.skipSilenceStrengthSeekBar);
+        int currentStrength = UserPreferences.getSkipSilenceStrength();
+        skipSilenceStrengthSeekBar.setProgress(currentStrength - 1);
+        updateSkipSilenceStrengthLabel(currentStrength);
+        skipSilenceStrengthContainer.setVisibility(UserPreferences.isSkipSilence() ? View.VISIBLE : View.GONE);
+
+        skipSilenceStrengthSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                int newStrength = progress + 1;
+                updateSkipSilenceStrengthLabel(newStrength);
+                if (fromUser) {
+                    UserPreferences.setSkipSilenceStrength(newStrength);
+                    if (BuildConfig.USE_MEDIA3_PLAYBACK_SERVICE) {
+                        PlaybackController.bindToMedia3Service(getContext(), mediaController ->
+                                mediaController.sendCustomCommand(
+                                        MediaLibrarySessionCallback.SESSION_COMMAND_SET_SKIP_SILENCE_STRENGTH,
+                                        MediaLibrarySessionCallback.createBundle((long) newStrength)));
+                    }
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+            }
+        });
+
         skipSilenceCheckbox.setOnCheckedChangeListener((buttonView, isChecked) -> {
             UserPreferences.setSkipSilence(isChecked);
+            skipSilenceStrengthContainer.setVisibility(isChecked ? View.VISIBLE : View.GONE);
             if (BuildConfig.USE_MEDIA3_PLAYBACK_SERVICE) {
                 PlaybackController.bindToMedia3Service(getContext(), mediaController ->
                         mediaController.sendCustomCommand(MediaLibrarySessionCallback.SESSION_COMMAND_SKIP_SILENCE,
