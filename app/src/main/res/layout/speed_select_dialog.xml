@@ -48,4 +48,28 @@
         android:layout_height="wrap_content"
         android:text="@string/pref_skip_silence_title" />
 
+    <LinearLayout
+        android:id="@+id/skipSilenceStrengthContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="32dp"
+        android:paddingEnd="8dp"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:id="@+id/skipSilenceStrengthLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            style="@style/AntennaPod.TextView.ListItemSecondaryTitle" />
+
+        <SeekBar
+            android:id="@+id/skipSilenceStrengthSeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="4"
+            android:progress="3" />
+
+    </LinearLayout>
+
 </LinearLayout>

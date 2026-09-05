@@ -47,6 +47,7 @@ import de.danoeh.antennapod.playback.base.MediaItemAdapter;
 import de.danoeh.antennapod.playback.base.PlayerStatus;
 import de.danoeh.antennapod.playback.base.RewindAfterPauseUtils;
 import de.danoeh.antennapod.playback.cast.CastPlayerWrapper;
+import de.danoeh.antennapod.playback.service.internal.ConfigurableSilenceSkippingAudioProcessor;
 import de.danoeh.antennapod.playback.service.internal.ExoPlayerUtils;
 import de.danoeh.antennapod.playback.service.internal.MediaLibrarySessionCallback;
 import de.danoeh.antennapod.playback.service.internal.PlayableUtils;
@@ -84,6 +85,7 @@ public class Media3PlaybackService extends MediaLibraryService {
     private static final String TAG = "M3PlaybackService";
     private static final long POSITION_SAVE_INTERVAL_MS = 5000;
     private ExoPlayer exoPlayer;
+    private ConfigurableSilenceSkippingAudioProcessor silenceSkippingAudioProcessor;
     private Player player;
     private MediaLibrarySession mediaSession;
     private FeedMedia currentPlayable;
@@ -109,7 +111,8 @@ public class Media3PlaybackService extends MediaLibraryService {
         notificationProvider.setSmallIcon(R.drawable.ic_notification);
         setMediaNotificationProvider(notificationProvider);
 
-        exoPlayer = ExoPlayerUtils.buildPlayer(this);
+        silenceSkippingAudioProcessor = new ConfigurableSilenceSkippingAudioProcessor();
+        exoPlayer = ExoPlayerUtils.buildPlayer(this, silenceSkippingAudioProcessor);
         exoPlayer.addListener(new Player.Listener() {
             @Override
             public void onAudioSessionIdChanged(int audioSessionId) {
@@ -246,6 +249,11 @@ public class Media3PlaybackService extends MediaLibraryService {
                 boolean enabled = MediaLibrarySessionCallback.getBoolean(args, false);
                 PlaybackPreferences.setCurrentlyPlayingTemporarySkipSilence(enabled);
                 exoPlayer.setSkipSilenceEnabled(enabled);
+                return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
+            } else if (customCommand.customAction.equals(SESSION_COMMAND_SET_SKIP_SILENCE_STRENGTH.customAction)) {
+                int strength = (int) MediaLibrarySessionCallback.getLong(args,
+                        UserPreferences.SKIP_SILENCE_STRENGTH_DEFAULT);
+                silenceSkippingAudioProcessor.setStrength(strength);
                 return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
             } else if (customCommand.customAction.equals(SESSION_COMMAND_SET_SLEEP_TIMER.customAction)) {
                 startSleepTimer(SleepTimerPreferences.timerMillisOrEpisodes());
@@ -516,6 +524,7 @@ public class Media3PlaybackService extends MediaLibraryService {
                 == FeedPreferences.SkipSilence.AGGRESSIVE;
         PlaybackPreferences.setCurrentlyPlayingTemporarySkipSilence(enabled);
         exoPlayer.setSkipSilenceEnabled(enabled);
+        silenceSkippingAudioProcessor.setStrength(UserPreferences.getSkipSilenceStrength());
         if (currentPlayable.getItem() != null && currentPlayable.getItem().getFeed() != null) {
             volumeAdaptionFactor = currentPlayable.getItem().getFeed()
                     .getPreferences().getVolumeAdaptionSetting().getAdaptionFactor();

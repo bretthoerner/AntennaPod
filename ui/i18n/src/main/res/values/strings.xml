@@ -588,6 +588,12 @@
     <string name="pref_enqueue_downloaded_title">Enqueue downloaded</string>
     <string name="pref_enqueue_downloaded_summary">Add downloaded episodes to the queue</string>
     <string name="pref_skip_silence_title">Skip silence in audio</string>
+    <string name="pref_skip_silence_strength_title">Skip silence strength: %1$s</string>
+    <string name="skip_silence_strength_1">Very light</string>
+    <string name="skip_silence_strength_2">Light</string>
+    <string name="skip_silence_strength_3">Medium</string>
+    <string name="skip_silence_strength_4">Heavy (default)</string>
+    <string name="skip_silence_strength_5">Aggressive</string>
     <string name="behavior">Behavior</string>
     <string name="episode_lists">Episode lists</string>
     <string name="pref_default_page">Default page</string>
