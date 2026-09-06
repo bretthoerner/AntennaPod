@@ -19,6 +19,8 @@ android {
         } catch (Exception ignore) {
         }
         buildConfigField "String", "COMMIT_HASH", ('"' + (commit.isEmpty() ? "Unknown commit" : commit) + '"')
+        def buildTime = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", java.util.Locale.US).format(new java.util.Date())
+        buildConfigField "String", "BUILD_TIME", ('"' + buildTime + '"')
     }
 
     lint {
