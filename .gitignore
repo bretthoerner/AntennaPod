@@ -33,3 +33,5 @@ gradle.properties
 .kotlin
 .claude
 .cursor
+.artifacts/
+.gradle_home/
