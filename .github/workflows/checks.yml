@@ -110,18 +110,9 @@ jobs:
     strategy:
       matrix:
         version:
-          - api-level: 23
-            target: default
-            build-type: debug
-          - api-level: 30
-            target: aosp_atd
-            build-type: debug
           - api-level: 36
             target: aosp_atd
             build-type: debug
-          - api-level: 23
-            target: default
-            build-type: release
           - api-level: 36
             target: aosp_atd
             build-type: release
