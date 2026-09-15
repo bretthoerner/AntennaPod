@@ -6,7 +6,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import okhttp3.Request;
 import okhttp3.Response;
-import okhttp3.internal.http.StatusLine;
 
 import java.io.IOException;
 import java.net.HttpURLConnection;
@@ -31,7 +30,7 @@ public abstract class RedirectChecker {
         int firstCode = responses.get(0).code();
         String firstUrl = responses.get(0).request().url().toString();
         String secondUrl = responses.get(1).request().url().toString();
-        if (firstCode == HttpURLConnection.HTTP_MOVED_PERM || firstCode == StatusLine.HTTP_PERM_REDIRECT) {
+        if (firstCode == HttpURLConnection.HTTP_MOVED_PERM || firstCode == 308) {
             Log.d(TAG, "Detected permanent redirect from " + firstUrl + " to " + secondUrl);
             return secondUrl;
         } else if (secondUrl.equals(firstUrl.replace("http://", "https://"))) {
