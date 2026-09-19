@@ -6,6 +6,7 @@ import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.media.MediaMuxer;
 import android.net.Uri;
+import android.os.Build;
 import android.util.Log;
 
 import java.io.File;
@@ -124,7 +125,8 @@ public class MediaClipUtils {
                     if ((sampleFlags & MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
                         bufferFlags |= MediaCodec.BUFFER_FLAG_KEY_FRAME;
                     }
-                    if ((sampleFlags & MediaExtractor.SAMPLE_FLAG_PARTIAL_FRAME) != 0) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                            && (sampleFlags & MediaExtractor.SAMPLE_FLAG_PARTIAL_FRAME) != 0) {
                         bufferFlags |= MediaCodec.BUFFER_FLAG_PARTIAL_FRAME;
                     }
                     info.flags = bufferFlags;
@@ -147,7 +149,7 @@ public class MediaClipUtils {
             if (muxer != null) {
                 try {
                     muxer.release();
-                } catch (RuntimeException e) {
+                } catch (Throwable e) {
                     Log.e(TAG, "Error releasing muxer", e);
                 }
             }
@@ -313,31 +315,39 @@ public class MediaClipUtils {
             if (decoder != null) {
                 try {
                     decoder.stop();
+                } catch (Throwable e) {
+                    Log.d(TAG, "Error stopping decoder", e);
+                }
+                try {
                     decoder.release();
-                } catch (IllegalStateException ignored) {
-                    Log.d(TAG, "Ignored error stopping decoder", ignored);
+                } catch (Throwable e) {
+                    Log.d(TAG, "Error releasing decoder", e);
                 }
             }
             if (encoder != null) {
                 try {
                     encoder.stop();
+                } catch (Throwable e) {
+                    Log.d(TAG, "Error stopping encoder", e);
+                }
+                try {
                     encoder.release();
-                } catch (IllegalStateException ignored) {
-                    Log.d(TAG, "Ignored error stopping encoder", ignored);
+                } catch (Throwable e) {
+                    Log.d(TAG, "Error releasing encoder", e);
                 }
             }
             if (extractor != null) {
                 try {
                     extractor.release();
-                } catch (RuntimeException ignored) {
-                    Log.d(TAG, "Ignored error releasing extractor", ignored);
+                } catch (Throwable e) {
+                    Log.d(TAG, "Error releasing extractor", e);
                 }
             }
             if (muxer != null) {
                 try {
                     muxer.release();
-                } catch (RuntimeException ignored) {
-                    Log.d(TAG, "Ignored error releasing muxer", ignored);
+                } catch (Throwable e) {
+                    Log.d(TAG, "Error releasing muxer", e);
                 }
             }
         }
