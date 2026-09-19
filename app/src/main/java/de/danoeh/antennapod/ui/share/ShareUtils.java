@@ -104,4 +104,14 @@ public class ShareUtils {
 
         Log.e(TAG, "shareFeedItemFile called");
     }
+
+    public static void shareAudioClipFile(Context context, File clipFile) {
+        Uri fileUri = FileProvider.getUriForFile(context, context.getString(R.string.provider_authority), clipFile);
+
+        new ShareCompat.IntentBuilder(context)
+                .setType("audio/*")
+                .addStream(fileUri)
+                .setChooserTitle(R.string.share_file_label)
+                .startChooser();
+    }
 }
