@@ -18,7 +18,10 @@ import de.danoeh.antennapod.storage.preferences.UserPreferences;
 import io.reactivex.rxjava3.core.Observable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -101,20 +104,29 @@ public class DownloadServiceInterfaceImpl extends DownloadServiceInterface {
 
     @Override
     public int getNumberOfActiveDownloads(Context context) {
+        return getActiveDownloads(context).size();
+    }
+
+    @Override
+    public Set<String> getActiveDownloads(Context context) {
         try {
             List<WorkInfo> workInfos = WorkManager.getInstance(context)
                     .getWorkInfosByTag(DownloadServiceInterface.WORK_TAG).get();
-            int count = 0;
+            Set<String> activeUrls = new HashSet<>();
             for (WorkInfo info : workInfos) {
                 if (info.getState() == WorkInfo.State.RUNNING
                         || info.getState() == WorkInfo.State.ENQUEUED
                         || info.getState() == WorkInfo.State.BLOCKED) {
-                    count++;
+                    for (String tag : info.getTags()) {
+                        if (tag.startsWith(WORK_TAG_EPISODE_URL)) {
+                            activeUrls.add(tag.substring(WORK_TAG_EPISODE_URL.length()));
+                        }
+                    }
                 }
             }
-            return count;
+            return activeUrls;
         } catch (ExecutionException | InterruptedException e) {
-            return 0;
+            return Collections.emptySet();
         }
     }
 }

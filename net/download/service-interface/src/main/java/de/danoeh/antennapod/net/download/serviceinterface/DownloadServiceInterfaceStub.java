@@ -4,6 +4,9 @@ import android.content.Context;
 import de.danoeh.antennapod.model.feed.FeedItem;
 import de.danoeh.antennapod.model.feed.FeedMedia;
 
+import java.util.Collections;
+import java.util.Set;
+
 public class DownloadServiceInterfaceStub extends DownloadServiceInterface {
 
     @Override
@@ -25,5 +28,10 @@ public class DownloadServiceInterfaceStub extends DownloadServiceInterface {
     @Override
     public int getNumberOfActiveDownloads(Context context) {
         return 0;
+    }
+
+    @Override
+    public Set<String> getActiveDownloads(Context context) {
+        return Collections.emptySet();
     }
 }
