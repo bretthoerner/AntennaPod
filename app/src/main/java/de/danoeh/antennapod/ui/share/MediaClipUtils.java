@@ -82,8 +82,8 @@ public class MediaClipUtils {
             extractor.selectTrack(audioTrackIndex);
 
             File outputFile = new File(outputPath);
-            if (outputFile.exists()) {
-                outputFile.delete();
+            if (outputFile.exists() && !outputFile.delete()) {
+                Log.w(TAG, "Could not delete existing file: " + outputPath);
             }
 
             muxer = new MediaMuxer(outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
@@ -118,7 +118,17 @@ public class MediaClipUtils {
                         firstSampleTimeUs = sampleTimeUs;
                     }
                     info.presentationTimeUs = sampleTimeUs - firstSampleTimeUs;
-                    info.flags = extractor.getSampleFlags();
+
+                    int sampleFlags = extractor.getSampleFlags();
+                    int bufferFlags = 0;
+                    if ((sampleFlags & MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
+                        bufferFlags |= MediaCodec.BUFFER_FLAG_KEY_FRAME;
+                    }
+                    if ((sampleFlags & MediaExtractor.SAMPLE_FLAG_PARTIAL_FRAME) != 0) {
+                        bufferFlags |= MediaCodec.BUFFER_FLAG_PARTIAL_FRAME;
+                    }
+                    info.flags = bufferFlags;
+
                     muxer.writeSampleData(muxerTrackIndex, buffer, info);
                 }
 
@@ -137,7 +147,7 @@ public class MediaClipUtils {
             if (muxer != null) {
                 try {
                     muxer.release();
-                } catch (Exception e) {
+                } catch (RuntimeException e) {
                     Log.e(TAG, "Error releasing muxer", e);
                 }
             }
@@ -194,8 +204,8 @@ public class MediaClipUtils {
             encoder.start();
 
             File outputFile = new File(outputPath);
-            if (outputFile.exists()) {
-                outputFile.delete();
+            if (outputFile.exists() && !outputFile.delete()) {
+                Log.w(TAG, "Could not delete existing output file: " + outputPath);
             }
             muxer = new MediaMuxer(outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
 
@@ -304,7 +314,7 @@ public class MediaClipUtils {
                 try {
                     decoder.stop();
                     decoder.release();
-                } catch (Exception ignored) {
+                } catch (IllegalStateException ignored) {
                     Log.d(TAG, "Ignored error stopping decoder", ignored);
                 }
             }
@@ -312,21 +322,21 @@ public class MediaClipUtils {
                 try {
                     encoder.stop();
                     encoder.release();
-                } catch (Exception ignored) {
+                } catch (IllegalStateException ignored) {
                     Log.d(TAG, "Ignored error stopping encoder", ignored);
                 }
             }
             if (extractor != null) {
                 try {
                     extractor.release();
-                } catch (Exception ignored) {
+                } catch (RuntimeException ignored) {
                     Log.d(TAG, "Ignored error releasing extractor", ignored);
                 }
             }
             if (muxer != null) {
                 try {
                     muxer.release();
-                } catch (Exception ignored) {
+                } catch (RuntimeException ignored) {
                     Log.d(TAG, "Ignored error releasing muxer", ignored);
                 }
             }
