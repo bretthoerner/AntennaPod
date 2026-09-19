@@ -6,7 +6,9 @@ cd "$SCRIPT_DIR"
 
 ADB="${ADB:-}"
 if [ -z "$ADB" ]; then
-    if [ -x "/Users/brett/Library/Android/sdk/platform-tools/adb" ]; then
+    if [ -x "$HOME/Android/Sdk/platform-tools/adb" ]; then
+        ADB="$HOME/Android/Sdk/platform-tools/adb"
+    elif [ -x "/Users/brett/Library/Android/sdk/platform-tools/adb" ]; then
         ADB="/Users/brett/Library/Android/sdk/platform-tools/adb"
     elif [ -n "${ANDROID_HOME:-}" ] && [ -x "$ANDROID_HOME/platform-tools/adb" ]; then
         ADB="$ANDROID_HOME/platform-tools/adb"
@@ -19,6 +21,9 @@ if [ -z "$ADB" ]; then
 fi
 
 echo "==> Ensuring wireless adb is running and finding device..."
+if ! "$ADB" mdns check >/dev/null 2>&1; then
+    "$ADB" kill-server >/dev/null 2>&1 || true
+fi
 "$ADB" start-server
 
 TARGET_DEVICE="${ANDROID_SERIAL:-}"
