@@ -941,7 +941,18 @@
     <string name="share_dialog_for_social">Social message</string>
     <string name="share_dialog_media_address">Media address</string>
     <string name="share_dialog_media_file_label">Media file</string>
+    <string name="share_audio_clip_label">Audio clip</string>
+    <string name="share_audio_clip_description">Export a short audio segment</string>
     <string name="share_starting_position_label">Starting from</string>
+    <string name="audio_clip_title">Create audio clip</string>
+    <string name="audio_clip_start_time">Start: %s</string>
+    <string name="audio_clip_end_time">End: %s</string>
+    <string name="audio_clip_duration">Duration: %s</string>
+    <string name="audio_clip_preview">Preview</string>
+    <string name="audio_clip_export">Export clip</string>
+    <string name="audio_clip_exporting">Exporting clip…</string>
+    <string name="audio_clip_error">Could not create audio clip</string>
+    <string name="audio_clip_download_first">Please download the episode before creating a clip</string>
 
     <!-- Audio controls -->
     <string name="audio_controls">Audio controls</string>
