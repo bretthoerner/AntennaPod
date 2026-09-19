@@ -6,9 +6,11 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
+import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.databinding.ShareEpisodeDialogBinding;
 import de.danoeh.antennapod.model.feed.FeedItem;
 
@@ -47,6 +49,16 @@ public class ShareDialog extends BottomSheetDialogFragment {
         } else {
             viewBinding.mediaFileCardCard.setVisibility(View.GONE);
         }
+
+        viewBinding.audioClipCard.setOnClickListener(v -> {
+            if (item.getMedia() != null && item.getMedia().isDownloaded()) {
+                AudioClipDialog audioClipDialog = AudioClipDialog.newInstance(item);
+                audioClipDialog.show(getParentFragmentManager(), "AudioClipDialog");
+                dismiss();
+            } else {
+                Toast.makeText(getContext(), R.string.audio_clip_download_first, Toast.LENGTH_SHORT).show();
+            }
+        });
 
         if (item.getMedia() != null && item.getMedia().getDownloadUrl() != null) {
             viewBinding.mediaAddressText.setText(item.getMedia().getDownloadUrl());
