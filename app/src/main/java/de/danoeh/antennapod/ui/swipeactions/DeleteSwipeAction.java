@@ -6,9 +6,10 @@ import androidx.fragment.app.Fragment;
 import java.util.Collections;
 
 import de.danoeh.antennapod.R;
-import de.danoeh.antennapod.storage.database.DBWriter;
 import de.danoeh.antennapod.model.feed.FeedItem;
 import de.danoeh.antennapod.model.feed.FeedItemFilter;
+import de.danoeh.antennapod.storage.database.DBWriter;
+import de.danoeh.antennapod.storage.preferences.UserPreferences;
 import de.danoeh.antennapod.ui.view.LocalDeleteModal;
 
 public class DeleteSwipeAction implements SwipeAction {
@@ -36,15 +37,23 @@ public class DeleteSwipeAction implements SwipeAction {
     @Override
     public void performAction(FeedItem item, Fragment fragment, FeedItemFilter filter) {
         if (!item.isDownloaded()) {
+            if (filter != null && filter.showQueued) {
+                DBWriter.removeQueueItem(fragment.requireContext(), true, item);
+            }
             return;
         }
         LocalDeleteModal.showLocalFeedDeleteWarningIfNecessary(
                 fragment.requireContext(), Collections.singletonList(item),
-                () -> DBWriter.deleteFeedMediaOfItem(fragment.requireContext(), item.getMedia()));
+                () -> {
+                    DBWriter.deleteFeedMediaOfItem(fragment.requireContext(), item.getMedia());
+                    if (filter != null && filter.showQueued && !UserPreferences.shouldDeleteRemoveFromQueue()) {
+                        DBWriter.removeQueueItem(fragment.requireContext(), true, item);
+                    }
+                });
     }
 
     @Override
     public boolean willRemove(FeedItemFilter filter, FeedItem item) {
-        return filter.showDownloaded && item.isDownloaded();
+        return filter != null && ((filter.showDownloaded && item.isDownloaded()) || filter.showQueued);
     }
 }
