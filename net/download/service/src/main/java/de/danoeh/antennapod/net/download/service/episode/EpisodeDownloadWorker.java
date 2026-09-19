@@ -21,6 +21,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import de.danoeh.antennapod.net.download.service.R;
 import de.danoeh.antennapod.net.download.service.feed.remote.DefaultDownloaderFactory;
 import de.danoeh.antennapod.net.download.service.feed.remote.Downloader;
+import de.danoeh.antennapod.net.download.serviceinterface.AutoDownloadManager;
 import de.danoeh.antennapod.net.download.serviceinterface.DownloadRequestCreator;
 import de.danoeh.antennapod.storage.database.DBReader;
 import de.danoeh.antennapod.storage.database.DBWriter;
@@ -115,6 +116,9 @@ public class EpisodeDownloadWorker extends Worker {
                         .getSystemService(Context.NOTIFICATION_SERVICE);
                 nm.cancel(R.id.notification_downloading);
             }
+        }
+        if (!result.equals(Result.retry()) && AutoDownloadManager.getInstance() != null) {
+            AutoDownloadManager.getInstance().autodownloadUndownloadedItems(getApplicationContext());
         }
         Log.d(TAG, "Worker for " + media.getDownloadUrl() + " returned.");
         return result;
