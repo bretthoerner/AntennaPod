@@ -9,6 +9,7 @@ import android.util.Log;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 import de.danoeh.antennapod.model.feed.FeedItem;
 import de.danoeh.antennapod.model.feed.FeedItemFilter;
@@ -54,16 +55,22 @@ public class AutomaticDownloadAlgorithm {
                 final List<FeedItem> newItems = DBReader.getAutoDownloadCandidates(
                         globalAutoDownloadEnabled, autoDownloadQueueEnabled);
                 final List<FeedItem> candidates = new ArrayList<>();
+                List<FeedItem> queuedCandidates = new ArrayList<>();
+                List<FeedItem> otherCandidates = new ArrayList<>();
 
                 for (FeedItem newItem : newItems) {
                     FeedPreferences feedPrefs = newItem.getFeed().getPreferences();
-                    boolean shouldAdd = (autoDownloadQueueEnabled && newItem.isTagged(FeedItem.TAG_QUEUE))
-                            || (feedPrefs.isAutoDownload(globalAutoDownloadEnabled)
-                            && feedPrefs.getFilter().shouldAutoDownload(newItem));
-                    if (shouldAdd) {
-                        candidates.add(newItem);
+                    if (autoDownloadQueueEnabled && newItem.isTagged(FeedItem.TAG_QUEUE)) {
+                        queuedCandidates.add(newItem);
+                    } else if (feedPrefs.isAutoDownload(globalAutoDownloadEnabled)
+                            && feedPrefs.getFilter().shouldAutoDownload(newItem)) {
+                        otherCandidates.add(newItem);
                     }
                 }
+                candidates.addAll(queuedCandidates);
+                candidates.addAll(otherCandidates);
+
+                Set<String> activeDownloads = DownloadServiceInterface.get().getActiveDownloads(context);
 
                 // filter items that are not auto downloadable
                 Iterator<FeedItem> it = candidates.iterator();
@@ -72,14 +79,15 @@ public class AutomaticDownloadAlgorithm {
                     if (!item.isAutoDownloadEnabled()
                             || item.isDownloaded()
                             || !item.hasMedia()
-                            || item.getFeed().isLocalFeed()) {
+                            || item.getFeed().isLocalFeed()
+                            || activeDownloads.contains(item.getMedia().getDownloadUrl())) {
                         it.remove();
                     }
                 }
 
                 int autoDownloadableEpisodes = candidates.size();
                 int downloadedEpisodes = DBReader.getTotalEpisodeCount(new FeedItemFilter(FeedItemFilter.DOWNLOADED));
-                downloadedEpisodes += DownloadServiceInterface.get().getNumberOfActiveDownloads(context);
+                downloadedEpisodes += activeDownloads.size();
                 int deletedEpisodes = EpisodeCleanupAlgorithmFactory.build()
                         .makeRoomForEpisodes(context, autoDownloadableEpisodes);
                 boolean cacheIsUnlimited =
@@ -93,7 +101,8 @@ public class AutomaticDownloadAlgorithm {
                     episodeSpaceLeft = episodeCacheSize - (downloadedEpisodes - deletedEpisodes);
                 }
 
-                List<FeedItem> itemsToDownload = candidates.subList(0, episodeSpaceLeft);
+                int clampedSpaceLeft = Math.max(0, Math.min(candidates.size(), episodeSpaceLeft));
+                List<FeedItem> itemsToDownload = candidates.subList(0, clampedSpaceLeft);
                 if (!itemsToDownload.isEmpty()) {
                     Log.d(TAG, "Enqueueing " + itemsToDownload.size() + " items for download");
 
@@ -112,6 +121,9 @@ public class AutomaticDownloadAlgorithm {
         // from http://developer.android.com/training/monitoring-device-state/battery-monitoring.html
         IntentFilter intentFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
         Intent batteryStatus = context.registerReceiver(null, intentFilter);
+        if (batteryStatus == null) {
+            return false;
+        }
 
         int status = batteryStatus.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
         return (status == BatteryManager.BATTERY_STATUS_CHARGING

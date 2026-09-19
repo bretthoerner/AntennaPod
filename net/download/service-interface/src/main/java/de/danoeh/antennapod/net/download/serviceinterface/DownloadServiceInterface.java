@@ -7,6 +7,7 @@ import de.danoeh.antennapod.model.feed.FeedMedia;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 public abstract class DownloadServiceInterface {
     public static final String WORK_TAG = "episodeDownload";
@@ -58,4 +59,6 @@ public abstract class DownloadServiceInterface {
     }
 
     public abstract int getNumberOfActiveDownloads(Context context);
+
+    public abstract Set<String> getActiveDownloads(Context context);
 }
