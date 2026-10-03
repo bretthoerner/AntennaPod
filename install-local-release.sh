@@ -20,6 +20,14 @@ if [ -z "$ADB" ]; then
     fi
 fi
 
+if [ -z "${JAVA_HOME:-}" ]; then
+    if [ -d "/opt/android-studio/jbr" ]; then
+        export JAVA_HOME="/opt/android-studio/jbr"
+    elif [ -d "/Applications/Android Studio.app/Contents/jbr/Contents/Home" ]; then
+        export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+    fi
+fi
+
 echo "==> Ensuring wireless adb is running and finding device..."
 if ! "$ADB" mdns check >/dev/null 2>&1; then
     "$ADB" kill-server >/dev/null 2>&1 || true
