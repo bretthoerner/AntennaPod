@@ -40,6 +40,8 @@ import de.danoeh.antennapod.ui.episodes.ImageResourceUtils;
 public class AudioClipDialog extends BottomSheetDialogFragment {
     private static final String TAG = "AudioClipDialog";
     private static final String ARGUMENT_FEED_ITEM = "feedItem";
+    private static final int WINDOW_RADIUS_SEC = 5 * 60;
+    private static final int WINDOW_SIZE_SEC = WINDOW_RADIUS_SEC * 2;
 
     private AudioClipDialogBinding viewBinding;
     private MediaPlayer mediaPlayer;
@@ -47,6 +49,9 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
     private Runnable previewRunnable;
     private boolean isPreviewPlaying = false;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private int totalDurationSec = 0;
+    private int currentWindowStartSec = 0;
+    private int currentWindowEndSec = 0;
 
     public AudioClipDialog() {
         // Empty constructor required for DialogFragment
@@ -92,25 +97,55 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
             durationMs = 300000; // Fallback 5 minutes
         }
 
-        int totalSec = Math.max(1, durationMs / 1000);
-        int startSec = Math.max(0, media.getPosition() / 1000);
-        if (startSec >= totalSec) {
-            startSec = Math.max(0, totalSec - 30);
-        }
-        int endSec = Math.min(totalSec, startSec + 30);
-        if (endSec <= startSec) {
-            endSec = Math.min(totalSec, startSec + 1);
+        totalDurationSec = Math.max(1, durationMs / 1000);
+        int currentSec = Math.max(0, media.getPosition() / 1000);
+
+        if (totalDurationSec <= WINDOW_SIZE_SEC) {
+            currentWindowStartSec = 0;
+            currentWindowEndSec = totalDurationSec;
+            viewBinding.layoutWindowControls.setVisibility(View.GONE);
+        } else {
+            currentWindowStartSec = Math.max(0, currentSec - WINDOW_RADIUS_SEC);
+            currentWindowEndSec = Math.min(totalDurationSec, currentWindowStartSec + WINDOW_SIZE_SEC);
+            if (currentWindowEndSec - currentWindowStartSec < WINDOW_SIZE_SEC) {
+                currentWindowStartSec = Math.max(0, currentWindowEndSec - WINDOW_SIZE_SEC);
+            }
+            viewBinding.layoutWindowControls.setVisibility(View.VISIBLE);
         }
 
-        viewBinding.rangeSlider.setValueFrom(0f);
-        viewBinding.rangeSlider.setValueTo((float) totalSec);
-        viewBinding.rangeSlider.setValues((float) startSec, (float) endSec);
+        int startSec = Math.max(currentWindowStartSec, currentSec);
+        if (startSec >= currentWindowEndSec) {
+            startSec = Math.max(currentWindowStartSec, currentWindowEndSec - 30);
+        }
+        int endSec = Math.min(currentWindowEndSec, startSec + 30);
+        if (endSec <= startSec) {
+            endSec = Math.min(currentWindowEndSec, startSec + 1);
+        }
+
         viewBinding.rangeSlider.setStepSize(1f);
         viewBinding.rangeSlider.setMinSeparationValue(1f);
         viewBinding.rangeSlider.setLabelFormatter(value ->
                 Converter.getDurationStringLong((int) (value * 1000)));
 
-        updateTimeLabels(startSec * 1000L, endSec * 1000L);
+        updateSliderAndWindow(currentWindowStartSec, currentWindowEndSec, startSec, endSec);
+
+        viewBinding.btnWindowPrev.setOnClickListener(v -> {
+            if (isPreviewPlaying) {
+                stopPreview();
+            }
+            int newStart = Math.max(0, currentWindowStartSec - WINDOW_RADIUS_SEC);
+            int newEnd = Math.min(totalDurationSec, newStart + WINDOW_SIZE_SEC);
+            shiftWindow(newStart, newEnd);
+        });
+
+        viewBinding.btnWindowNext.setOnClickListener(v -> {
+            if (isPreviewPlaying) {
+                stopPreview();
+            }
+            int newEnd = Math.min(totalDurationSec, currentWindowEndSec + WINDOW_RADIUS_SEC);
+            int newStart = Math.max(0, newEnd - WINDOW_SIZE_SEC);
+            shiftWindow(newStart, newEnd);
+        });
 
         viewBinding.rangeSlider.addOnChangeListener((slider, value, fromUser) -> {
             List<Float> values = slider.getValues();
@@ -312,6 +347,57 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
         viewBinding.btnPreview.setEnabled(!exporting);
         viewBinding.btnCancel.setEnabled(!exporting);
         viewBinding.rangeSlider.setEnabled(!exporting);
+        viewBinding.btnWindowPrev.setEnabled(!exporting && currentWindowStartSec > 0);
+        viewBinding.btnWindowNext.setEnabled(!exporting && currentWindowEndSec < totalDurationSec);
+    }
+
+    private void shiftWindow(int newStart, int newEnd) {
+        if (viewBinding == null) {
+            return;
+        }
+        List<Float> values = viewBinding.rangeSlider.getValues();
+        int curStart = Math.round(values.get(0));
+        int curEnd = Math.round(values.get(1));
+        int curDuration = Math.max(1, curEnd - curStart);
+
+        if (curStart < newStart) {
+            curStart = newStart;
+            curEnd = Math.min(newEnd, curStart + curDuration);
+        } else if (curEnd > newEnd) {
+            curEnd = newEnd;
+            curStart = Math.max(newStart, curEnd - curDuration);
+        }
+        updateSliderAndWindow(newStart, newEnd, curStart, curEnd);
+    }
+
+    private void updateSliderAndWindow(int winStart, int winEnd, int startSec, int endSec) {
+        if (viewBinding == null) {
+            return;
+        }
+        currentWindowStartSec = winStart;
+        currentWindowEndSec = winEnd;
+
+        float minBound = Math.min(viewBinding.rangeSlider.getValueFrom(), winStart);
+        float maxBound = Math.max(viewBinding.rangeSlider.getValueTo(), winEnd);
+        viewBinding.rangeSlider.setValueFrom(minBound);
+        viewBinding.rangeSlider.setValueTo(maxBound);
+        viewBinding.rangeSlider.setValues((float) startSec, (float) endSec);
+        viewBinding.rangeSlider.setValueFrom((float) winStart);
+        viewBinding.rangeSlider.setValueTo((float) winEnd);
+
+        updateWindowRangeLabel();
+        updateTimeLabels(startSec * 1000L, endSec * 1000L);
+    }
+
+    private void updateWindowRangeLabel() {
+        if (viewBinding == null) {
+            return;
+        }
+        viewBinding.txtvWindowRange.setText(getString(R.string.audio_clip_window_range,
+                Converter.getDurationStringLong(currentWindowStartSec * 1000),
+                Converter.getDurationStringLong(currentWindowEndSec * 1000)));
+        viewBinding.btnWindowPrev.setEnabled(currentWindowStartSec > 0);
+        viewBinding.btnWindowNext.setEnabled(currentWindowEndSec < totalDurationSec);
     }
 
     @Override
