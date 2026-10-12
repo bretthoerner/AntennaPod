@@ -50,15 +50,19 @@ public class ShareDialog extends BottomSheetDialogFragment {
             viewBinding.mediaFileCardCard.setVisibility(View.GONE);
         }
 
-        viewBinding.audioClipCard.setOnClickListener(v -> {
-            if (item.getMedia() != null && item.getMedia().isDownloaded()) {
-                AudioClipDialog audioClipDialog = AudioClipDialog.newInstance(item);
-                audioClipDialog.show(getParentFragmentManager(), "AudioClipDialog");
-                dismiss();
-            } else {
-                Toast.makeText(getContext(), R.string.audio_clip_download_first, Toast.LENGTH_SHORT).show();
-            }
-        });
+        if (item.getMedia() == null) {
+            viewBinding.audioClipCard.setVisibility(View.GONE);
+        } else {
+            viewBinding.audioClipCard.setOnClickListener(v -> {
+                if (item.getMedia().isDownloaded()) {
+                    AudioClipDialog audioClipDialog = AudioClipDialog.newInstance(item);
+                    audioClipDialog.show(getParentFragmentManager(), "AudioClipDialog");
+                    dismiss();
+                } else {
+                    Toast.makeText(getContext(), R.string.audio_clip_download_first, Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
 
         if (item.getMedia() != null && item.getMedia().getDownloadUrl() != null) {
             viewBinding.mediaAddressText.setText(item.getMedia().getDownloadUrl());

@@ -1,5 +1,6 @@
 package de.danoeh.antennapod.ui.share;
 
+import android.content.Context;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.os.Bundle;
@@ -13,6 +14,7 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.media3.session.MediaController;
 
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 
@@ -22,6 +24,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import de.danoeh.antennapod.R;
+import de.danoeh.antennapod.playback.service.PlaybackController;
 import de.danoeh.antennapod.databinding.AudioClipDialogBinding;
 import de.danoeh.antennapod.model.feed.FeedItem;
 import de.danoeh.antennapod.model.feed.FeedMedia;
@@ -96,6 +99,7 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
         viewBinding.rangeSlider.setValueTo((float) totalSec);
         viewBinding.rangeSlider.setValues((float) startSec, (float) endSec);
         viewBinding.rangeSlider.setStepSize(1f);
+        viewBinding.rangeSlider.setMinSeparationValue(1f);
         viewBinding.rangeSlider.setLabelFormatter(value ->
                 Converter.getDurationStringLong((int) (value * 1000)));
 
@@ -155,6 +159,7 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
         }
         try {
             stopPreview();
+            PlaybackController.bindToMedia3Service(getContext(), MediaController::pause);
             mediaPlayer = new MediaPlayer();
             mediaPlayer.setDataSource(filePath);
             mediaPlayer.prepare();
@@ -227,8 +232,11 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
                     }
                     setExportUiState(false);
                     if (success && outputFile.exists()) {
+                        Context context = getContext();
                         dismiss();
-                        ShareUtils.shareAudioClipFile(getContext(), outputFile);
+                        if (context != null) {
+                            ShareUtils.shareAudioClipFile(context, outputFile);
+                        }
                     } else {
                         Toast.makeText(getContext(), R.string.audio_clip_error, Toast.LENGTH_SHORT).show();
                     }
@@ -249,9 +257,21 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
     }
 
     @Override
+    public void onStop() {
+        stopPreview();
+        super.onStop();
+    }
+
+    @Override
     public void onDestroyView() {
         stopPreview();
         viewBinding = null;
         super.onDestroyView();
+    }
+
+    @Override
+    public void onDestroy() {
+        executor.shutdown();
+        super.onDestroy();
     }
 }
