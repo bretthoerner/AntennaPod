@@ -395,7 +395,7 @@ public class MediaClipUtils {
                 muxer.stop();
             }
             return muxerStarted;
-        } catch (Exception e) {
+        } catch (IOException | RuntimeException e) {
             Log.e(TAG, "Transcoding audio clip failed", e);
             return false;
         } finally {
@@ -534,10 +534,10 @@ public class MediaClipUtils {
             out.write(newMoovData);
             copyFileRange(in, out, moovPos + moovSize, fileLen - (moovPos + moovSize));
 
-        } catch (Exception e) {
+        } catch (IOException e) {
             Log.e(TAG, "Failed to embed metadata in audio clip", e);
-            if (tempFile.exists()) {
-                tempFile.delete();
+            if (tempFile.exists() && !tempFile.delete()) {
+                Log.w(TAG, "Could not delete temporary metadata file: " + tempFile.getAbsolutePath());
             }
             return false;
         }

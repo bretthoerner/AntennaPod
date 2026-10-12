@@ -32,16 +32,24 @@ import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.playback.service.PlaybackController;
 import de.danoeh.antennapod.databinding.AudioClipDialogBinding;
 import de.danoeh.antennapod.model.MediaMetadataRetrieverCompat;
+import de.danoeh.antennapod.model.feed.Feed;
 import de.danoeh.antennapod.model.feed.FeedItem;
 import de.danoeh.antennapod.model.feed.FeedMedia;
+import de.danoeh.antennapod.storage.database.DBReader;
 import de.danoeh.antennapod.ui.common.Converter;
 import de.danoeh.antennapod.ui.episodes.ImageResourceUtils;
 
 public class AudioClipDialog extends BottomSheetDialogFragment {
     private static final String TAG = "AudioClipDialog";
     private static final String ARGUMENT_FEED_ITEM = "feedItem";
-    private static final int WINDOW_RADIUS_SEC = 5 * 60;
-    private static final int WINDOW_SIZE_SEC = WINDOW_RADIUS_SEC * 2;
+    private static final int WINDOW_BACK_SEC = 2 * 60;
+    private static final int WINDOW_FORWARD_SEC = 60;
+    private static final int WINDOW_INCREMENT_SEC = 60;
+
+    private static final String ARGUMENT_FEED_ID = "feedId";
+    private static final String ARGUMENT_FEED_TITLE = "feedTitle";
+    private static final String ARGUMENT_FEED_AUTHOR = "feedAuthor";
+    private static final String ARGUMENT_FEED_IMAGE_URL = "feedImageUrl";
 
     private AudioClipDialogBinding viewBinding;
     private MediaPlayer mediaPlayer;
@@ -60,6 +68,14 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
     public static AudioClipDialog newInstance(FeedItem item) {
         Bundle arguments = new Bundle();
         arguments.putSerializable(ARGUMENT_FEED_ITEM, item);
+        if (item != null) {
+            arguments.putLong(ARGUMENT_FEED_ID, item.getFeedId());
+            if (item.getFeed() != null) {
+                arguments.putString(ARGUMENT_FEED_TITLE, item.getFeed().getTitle());
+                arguments.putString(ARGUMENT_FEED_AUTHOR, item.getFeed().getAuthor());
+                arguments.putString(ARGUMENT_FEED_IMAGE_URL, item.getFeed().getImageUrl());
+            }
+        }
         AudioClipDialog dialog = new AudioClipDialog();
         dialog.setArguments(arguments);
         return dialog;
@@ -100,24 +116,22 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
         totalDurationSec = Math.max(1, durationMs / 1000);
         int currentSec = Math.max(0, media.getPosition() / 1000);
 
-        if (totalDurationSec <= WINDOW_SIZE_SEC) {
-            currentWindowStartSec = 0;
-            currentWindowEndSec = totalDurationSec;
+        currentWindowStartSec = Math.max(0, currentSec - WINDOW_BACK_SEC);
+        currentWindowEndSec = Math.min(totalDurationSec, currentSec + WINDOW_FORWARD_SEC);
+        if (currentWindowEndSec <= currentWindowStartSec) {
+            currentWindowEndSec = Math.min(totalDurationSec, currentWindowStartSec + 1);
+        }
+        if (currentWindowStartSec == 0 && currentWindowEndSec == totalDurationSec) {
             viewBinding.layoutWindowControls.setVisibility(View.GONE);
         } else {
-            currentWindowStartSec = Math.max(0, currentSec - WINDOW_RADIUS_SEC);
-            currentWindowEndSec = Math.min(totalDurationSec, currentWindowStartSec + WINDOW_SIZE_SEC);
-            if (currentWindowEndSec - currentWindowStartSec < WINDOW_SIZE_SEC) {
-                currentWindowStartSec = Math.max(0, currentWindowEndSec - WINDOW_SIZE_SEC);
-            }
             viewBinding.layoutWindowControls.setVisibility(View.VISIBLE);
         }
 
-        int startSec = Math.max(currentWindowStartSec, currentSec);
-        if (startSec >= currentWindowEndSec) {
-            startSec = Math.max(currentWindowStartSec, currentWindowEndSec - 30);
+        int startSec = Math.max(currentWindowStartSec, currentSec - 30);
+        int endSec = Math.min(currentWindowEndSec, currentSec);
+        if (endSec <= startSec) {
+            endSec = Math.min(currentWindowEndSec, startSec + 30);
         }
-        int endSec = Math.min(currentWindowEndSec, startSec + 30);
         if (endSec <= startSec) {
             endSec = Math.min(currentWindowEndSec, startSec + 1);
         }
@@ -133,18 +147,16 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
             if (isPreviewPlaying) {
                 stopPreview();
             }
-            int newStart = Math.max(0, currentWindowStartSec - WINDOW_RADIUS_SEC);
-            int newEnd = Math.min(totalDurationSec, newStart + WINDOW_SIZE_SEC);
-            shiftWindow(newStart, newEnd);
+            int newStart = Math.max(0, currentWindowStartSec - WINDOW_INCREMENT_SEC);
+            shiftWindow(newStart, currentWindowEndSec);
         });
 
         viewBinding.btnWindowNext.setOnClickListener(v -> {
             if (isPreviewPlaying) {
                 stopPreview();
             }
-            int newEnd = Math.min(totalDurationSec, currentWindowEndSec + WINDOW_RADIUS_SEC);
-            int newStart = Math.max(0, newEnd - WINDOW_SIZE_SEC);
-            shiftWindow(newStart, newEnd);
+            int newEnd = Math.min(totalDurationSec, currentWindowEndSec + WINDOW_INCREMENT_SEC);
+            shiftWindow(currentWindowStartSec, newEnd);
         });
 
         viewBinding.rangeSlider.addOnChangeListener((slider, value, fromUser) -> {
@@ -263,17 +275,42 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
         setExportUiState(true);
 
         Context appContext = getContext().getApplicationContext();
-        FeedItem item = getArguments() != null ? (FeedItem) getArguments().getSerializable(ARGUMENT_FEED_ITEM) : null;
+        Bundle args = getArguments();
+        long feedIdArg = args != null ? args.getLong(ARGUMENT_FEED_ID, 0) : 0;
+        String feedTitleArg = args != null ? args.getString(ARGUMENT_FEED_TITLE) : null;
+        String feedAuthorArg = args != null ? args.getString(ARGUMENT_FEED_AUTHOR) : null;
+        String feedImageUrlArg = args != null ? args.getString(ARGUMENT_FEED_IMAGE_URL) : null;
+        FeedItem item = args != null ? (FeedItem) args.getSerializable(ARGUMENT_FEED_ITEM) : null;
         File cacheDir = getContext().getCacheDir();
         File outputFile = new File(cacheDir, "clip_" + System.currentTimeMillis() + ".m4a");
 
         executor.execute(() -> {
             boolean success = MediaClipUtils.cropAudioFile(inputPath, outputFile.getAbsolutePath(), startMs, endMs);
             if (success && outputFile.exists() && item != null) {
-                byte[] imageBytes = loadEpisodeImage(appContext, item, inputPath);
-                String title = item.getTitle();
-                String artist = item.getFeed() != null ? item.getFeed().getAuthor() : null;
-                String album = item.getFeed() != null ? item.getFeed().getTitle() : null;
+                FeedItem exportItem = item;
+                if (exportItem.getFeed() == null && exportItem.getId() > 0) {
+                    FeedItem dbItem = DBReader.getFeedItem(exportItem.getId());
+                    if (dbItem != null) {
+                        exportItem = dbItem;
+                    }
+                }
+                if (exportItem.getFeed() == null) {
+                    long feedId = exportItem.getFeedId() > 0 ? exportItem.getFeedId() : feedIdArg;
+                    if (feedId > 0) {
+                        Feed feed = DBReader.getFeed(feedId, false, 0, 1);
+                        if (feed != null) {
+                            exportItem.setFeed(feed);
+                        }
+                    }
+                }
+                String fallbackImageUrl = feedImageUrlArg;
+                if (fallbackImageUrl == null && exportItem.getFeed() != null) {
+                    fallbackImageUrl = exportItem.getFeed().getImageUrl();
+                }
+                byte[] imageBytes = loadEpisodeImage(appContext, exportItem, inputPath, fallbackImageUrl);
+                String title = exportItem.getTitle();
+                String artist = exportItem.getFeed() != null ? exportItem.getFeed().getAuthor() : feedAuthorArg;
+                String album = exportItem.getFeed() != null ? exportItem.getFeed().getTitle() : feedTitleArg;
                 MediaClipUtils.embedMetadata(outputFile, imageBytes, title, artist, album);
             }
             if (getActivity() != null) {
@@ -297,12 +334,16 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
     }
 
     @Nullable
-    private byte[] loadEpisodeImage(Context context, FeedItem item, String localAudioPath) {
+    private byte[] loadEpisodeImage(Context context, FeedItem item, String localAudioPath,
+                                    @Nullable String fallbackImageUrl) {
         String imageLocation = ImageResourceUtils.getEpisodeListImageLocation(item);
         String fallbackLocation = ImageResourceUtils.getFallbackImageLocation(item);
         if (imageLocation == null) {
             imageLocation = fallbackLocation;
             fallbackLocation = null;
+        }
+        if (imageLocation == null) {
+            imageLocation = fallbackImageUrl;
         }
         if (imageLocation != null) {
             try {
@@ -344,6 +385,7 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
         }
         viewBinding.progressBar.setVisibility(exporting ? View.VISIBLE : View.GONE);
         viewBinding.btnExport.setEnabled(!exporting);
+        viewBinding.btnExport.setText(exporting ? R.string.audio_clip_exporting : R.string.audio_clip_export);
         viewBinding.btnPreview.setEnabled(!exporting);
         viewBinding.btnCancel.setEnabled(!exporting);
         viewBinding.rangeSlider.setEnabled(!exporting);
