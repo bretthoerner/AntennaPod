@@ -1,6 +1,7 @@
 package de.danoeh.antennapod.ui.share;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.os.Bundle;
@@ -16,19 +17,25 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.media3.session.MediaController;
 
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.RequestBuilder;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import de.danoeh.antennapod.R;
 import de.danoeh.antennapod.playback.service.PlaybackController;
 import de.danoeh.antennapod.databinding.AudioClipDialogBinding;
+import de.danoeh.antennapod.model.MediaMetadataRetrieverCompat;
 import de.danoeh.antennapod.model.feed.FeedItem;
 import de.danoeh.antennapod.model.feed.FeedMedia;
 import de.danoeh.antennapod.ui.common.Converter;
+import de.danoeh.antennapod.ui.episodes.ImageResourceUtils;
 
 public class AudioClipDialog extends BottomSheetDialogFragment {
     private static final String TAG = "AudioClipDialog";
@@ -71,7 +78,7 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
         FeedMedia media = item.getMedia();
         int durationMs = media.getDuration();
         if (durationMs <= 0 && media.getLocalFileUrl() != null) {
-            try (MediaMetadataRetriever retriever = new MediaMetadataRetriever()) {
+            try (MediaMetadataRetrieverCompat retriever = new MediaMetadataRetrieverCompat()) {
                 retriever.setDataSource(media.getLocalFileUrl());
                 String durStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
                 if (durStr != null) {
@@ -220,11 +227,20 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
         }
         setExportUiState(true);
 
+        Context appContext = getContext().getApplicationContext();
+        FeedItem item = getArguments() != null ? (FeedItem) getArguments().getSerializable(ARGUMENT_FEED_ITEM) : null;
         File cacheDir = getContext().getCacheDir();
         File outputFile = new File(cacheDir, "clip_" + System.currentTimeMillis() + ".m4a");
 
         executor.execute(() -> {
             boolean success = MediaClipUtils.cropAudioFile(inputPath, outputFile.getAbsolutePath(), startMs, endMs);
+            if (success && outputFile.exists() && item != null) {
+                byte[] imageBytes = loadEpisodeImage(appContext, item, inputPath);
+                String title = item.getTitle();
+                String artist = item.getFeed() != null ? item.getFeed().getAuthor() : null;
+                String album = item.getFeed() != null ? item.getFeed().getTitle() : null;
+                MediaClipUtils.embedMetadata(outputFile, imageBytes, title, artist, album);
+            }
             if (getActivity() != null) {
                 getActivity().runOnUiThread(() -> {
                     if (!isAdded() || viewBinding == null) {
@@ -243,6 +259,48 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
                 });
             }
         });
+    }
+
+    @Nullable
+    private byte[] loadEpisodeImage(Context context, FeedItem item, String localAudioPath) {
+        String imageLocation = ImageResourceUtils.getEpisodeListImageLocation(item);
+        String fallbackLocation = ImageResourceUtils.getFallbackImageLocation(item);
+        if (imageLocation == null) {
+            imageLocation = fallbackLocation;
+            fallbackLocation = null;
+        }
+        if (imageLocation != null) {
+            try {
+                RequestBuilder<Bitmap> request = Glide.with(context)
+                        .asBitmap()
+                        .load(imageLocation);
+                if (fallbackLocation != null) {
+                    request = request.error(Glide.with(context)
+                            .asBitmap()
+                            .load(fallbackLocation));
+                }
+                Bitmap bitmap = request.submit(1024, 1024).get(5, TimeUnit.SECONDS);
+                if (bitmap != null) {
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 90, baos);
+                    return baos.toByteArray();
+                }
+            } catch (Exception e) {
+                Log.d(TAG, "Failed to load image via Glide", e);
+            }
+        }
+        if (localAudioPath != null) {
+            try (MediaMetadataRetrieverCompat retriever = new MediaMetadataRetrieverCompat()) {
+                retriever.setDataSource(localAudioPath);
+                byte[] pic = retriever.getEmbeddedPicture();
+                if (pic != null) {
+                    return pic;
+                }
+            } catch (Exception e) {
+                Log.d(TAG, "Failed to get embedded picture", e);
+            }
+        }
+        return null;
     }
 
     private void setExportUiState(boolean exporting) {
