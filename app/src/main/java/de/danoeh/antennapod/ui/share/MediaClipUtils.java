@@ -10,6 +10,7 @@ import android.os.Build;
 import android.util.Log;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public class MediaClipUtils {
@@ -137,6 +138,9 @@ public class MediaClipUtils {
                 extractor.advance();
             }
 
+            if (firstSampleTimeUs < 0) {
+                return false;
+            }
             muxer.stop();
             return true;
         } catch (Exception e) {
@@ -154,6 +158,19 @@ public class MediaClipUtils {
                 }
             }
         }
+    }
+
+    private static MediaCodec createEncoder(int sampleRate, int channelCount) throws IOException {
+        MediaFormat outputFormat = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC,
+                sampleRate, channelCount);
+        outputFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC);
+        outputFormat.setInteger(MediaFormat.KEY_BIT_RATE, 128000);
+        outputFormat.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 64 * 1024);
+
+        MediaCodec encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);
+        encoder.configure(outputFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+        encoder.start();
+        return encoder;
     }
 
     private static boolean transcodeAudioClip(String inputPath, String outputPath, long startUs, long endUs) {
@@ -191,19 +208,13 @@ public class MediaClipUtils {
             decoder.configure(inputFormat, null, null, 0);
             decoder.start();
 
-            final int sampleRate = inputFormat.containsKey(MediaFormat.KEY_SAMPLE_RATE)
+            final int defaultSampleRate = inputFormat.containsKey(MediaFormat.KEY_SAMPLE_RATE)
                     ? inputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE) : 44100;
-            final int channelCount = inputFormat.containsKey(MediaFormat.KEY_CHANNEL_COUNT)
+            final int defaultChannelCount = inputFormat.containsKey(MediaFormat.KEY_CHANNEL_COUNT)
                     ? inputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT) : 2;
 
-            MediaFormat outputFormat = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC,
-                    sampleRate, channelCount);
-            outputFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC);
-            outputFormat.setInteger(MediaFormat.KEY_BIT_RATE, 128000);
-
-            encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);
-            encoder.configure(outputFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-            encoder.start();
+            int currentSampleRate = defaultSampleRate;
+            int currentChannelCount = defaultChannelCount;
 
             File outputFile = new File(outputPath);
             if (outputFile.exists() && !outputFile.delete()) {
@@ -222,6 +233,9 @@ public class MediaClipUtils {
             MediaCodec.BufferInfo encoderBufferInfo = new MediaCodec.BufferInfo();
 
             long firstPresentationUs = -1;
+            int pendingDecoderIndex = -1;
+            long currentPcmPtsUs = 0;
+            boolean encoderInputEos = false;
 
             while (!encoderEos) {
                 if (!extractorEos) {
@@ -243,64 +257,119 @@ public class MediaClipUtils {
                     }
                 }
 
-                if (!decoderEos) {
+                if (!decoderEos && pendingDecoderIndex < 0) {
                     int decoderStatus = decoder.dequeueOutputBuffer(decoderBufferInfo, TIMEOUT_US);
-                    if (decoderStatus >= 0) {
-                        ByteBuffer pcmBuf = decoder.getOutputBuffer(decoderStatus);
+                    if (decoderStatus == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                        MediaFormat decFormat = decoder.getOutputFormat();
+                        currentSampleRate = decFormat.containsKey(MediaFormat.KEY_SAMPLE_RATE)
+                                ? decFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE) : defaultSampleRate;
+                        currentChannelCount = decFormat.containsKey(MediaFormat.KEY_CHANNEL_COUNT)
+                                ? decFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT) : defaultChannelCount;
+                        if (encoder == null) {
+                            encoder = createEncoder(currentSampleRate, currentChannelCount);
+                        }
+                    } else if (decoderStatus >= 0) {
                         if ((decoderBufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
                             decoderEos = true;
                         }
-
-                        if (pcmBuf != null && decoderBufferInfo.size > 0
-                                && decoderBufferInfo.presentationTimeUs >= startUs
-                                && decoderBufferInfo.presentationTimeUs <= endUs) {
-
-                            int encoderInputIndex = encoder.dequeueInputBuffer(TIMEOUT_US);
-                            if (encoderInputIndex >= 0) {
-                                ByteBuffer encoderInputBuf = encoder.getInputBuffer(encoderInputIndex);
-                                if (encoderInputBuf != null) {
-                                    encoderInputBuf.clear();
-                                    pcmBuf.position(decoderBufferInfo.offset);
-                                    pcmBuf.limit(decoderBufferInfo.offset + decoderBufferInfo.size);
-                                    encoderInputBuf.put(pcmBuf);
-
-                                    int flags = decoderEos ? MediaCodec.BUFFER_FLAG_END_OF_STREAM : 0;
-                                    encoder.queueInputBuffer(encoderInputIndex, 0,
-                                            decoderBufferInfo.size, decoderBufferInfo.presentationTimeUs, flags);
-                                }
-                            }
+                        pendingDecoderIndex = decoderStatus;
+                        ByteBuffer pcmBuf = decoder.getOutputBuffer(pendingDecoderIndex);
+                        if (pcmBuf != null) {
+                            pcmBuf.position(decoderBufferInfo.offset);
+                            pcmBuf.limit(decoderBufferInfo.offset + decoderBufferInfo.size);
                         }
-                        decoder.releaseOutputBuffer(decoderStatus, false);
+                        currentPcmPtsUs = decoderBufferInfo.presentationTimeUs;
                     }
                 }
 
-                int encoderStatus = encoder.dequeueOutputBuffer(encoderBufferInfo, TIMEOUT_US);
-                if (encoderStatus == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                    if (!muxerStarted) {
-                        MediaFormat newFormat = encoder.getOutputFormat();
-                        muxerTrackIndex = muxer.addTrack(newFormat);
-                        muxer.start();
-                        muxerStarted = true;
-                    }
-                } else if (encoderStatus >= 0) {
-                    if (muxerStarted) {
-                        ByteBuffer encodedData = encoder.getOutputBuffer(encoderStatus);
-                        if (encodedData != null && encoderBufferInfo.size > 0) {
-                            if (firstPresentationUs < 0) {
-                                firstPresentationUs = encoderBufferInfo.presentationTimeUs;
-                            }
-                            encoderBufferInfo.presentationTimeUs =
-                                    Math.max(0, encoderBufferInfo.presentationTimeUs - firstPresentationUs);
+                if (pendingDecoderIndex >= 0) {
+                    ByteBuffer pcmBuf = decoder.getOutputBuffer(pendingDecoderIndex);
+                    boolean withinRange = pcmBuf != null && decoderBufferInfo.size > 0
+                            && decoderBufferInfo.presentationTimeUs >= startUs
+                            && decoderBufferInfo.presentationTimeUs <= endUs;
 
-                            encodedData.position(encoderBufferInfo.offset);
-                            encodedData.limit(encoderBufferInfo.offset + encoderBufferInfo.size);
-                            muxer.writeSampleData(muxerTrackIndex, encodedData, encoderBufferInfo);
+                    if (withinRange) {
+                        if (encoder == null) {
+                            encoder = createEncoder(currentSampleRate, currentChannelCount);
                         }
+                        int encoderInputIndex = encoder.dequeueInputBuffer(TIMEOUT_US);
+                        if (encoderInputIndex >= 0) {
+                            ByteBuffer encoderInputBuf = encoder.getInputBuffer(encoderInputIndex);
+                            if (encoderInputBuf != null) {
+                                encoderInputBuf.clear();
+                                int toTransfer = Math.min(pcmBuf.remaining(), encoderInputBuf.remaining());
+                                int bytesPerFrame = currentChannelCount * 2;
+                                if (bytesPerFrame > 0 && toTransfer < pcmBuf.remaining()) {
+                                    toTransfer = (toTransfer / bytesPerFrame) * bytesPerFrame;
+                                }
+                                if (toTransfer > 0) {
+                                    int oldLimit = pcmBuf.limit();
+                                    pcmBuf.limit(pcmBuf.position() + toTransfer);
+                                    encoderInputBuf.put(pcmBuf);
+                                    pcmBuf.limit(oldLimit);
+
+                                    encoder.queueInputBuffer(encoderInputIndex, 0,
+                                            toTransfer, currentPcmPtsUs, 0);
+
+                                    int frames = bytesPerFrame > 0 ? toTransfer / bytesPerFrame : 0;
+                                    currentPcmPtsUs += (currentSampleRate > 0)
+                                            ? (frames * 1_000_000L / currentSampleRate) : 0;
+                                }
+                            }
+                            if (!pcmBuf.hasRemaining()) {
+                                decoder.releaseOutputBuffer(pendingDecoderIndex, false);
+                                pendingDecoderIndex = -1;
+                            }
+                        }
+                    } else {
+                        decoder.releaseOutputBuffer(pendingDecoderIndex, false);
+                        pendingDecoderIndex = -1;
                     }
-                    if ((encoderBufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                        encoderEos = true;
+                }
+
+                if (decoderEos && pendingDecoderIndex < 0 && !encoderInputEos) {
+                    if (encoder == null) {
+                        encoder = createEncoder(currentSampleRate, currentChannelCount);
                     }
-                    encoder.releaseOutputBuffer(encoderStatus, false);
+                    int encoderInputIndex = encoder.dequeueInputBuffer(TIMEOUT_US);
+                    if (encoderInputIndex >= 0) {
+                        encoder.queueInputBuffer(encoderInputIndex, 0, 0, 0,
+                                MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                        encoderInputEos = true;
+                    }
+                }
+
+                if (encoder != null) {
+                    int encoderStatus = encoder.dequeueOutputBuffer(encoderBufferInfo, TIMEOUT_US);
+                    if (encoderStatus == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                        if (!muxerStarted) {
+                            MediaFormat newFormat = encoder.getOutputFormat();
+                            muxerTrackIndex = muxer.addTrack(newFormat);
+                            muxer.start();
+                            muxerStarted = true;
+                        }
+                    } else if (encoderStatus >= 0) {
+                        if (muxerStarted) {
+                            ByteBuffer encodedData = encoder.getOutputBuffer(encoderStatus);
+                            if (encodedData != null && encoderBufferInfo.size > 0) {
+                                if (firstPresentationUs < 0) {
+                                    firstPresentationUs = encoderBufferInfo.presentationTimeUs;
+                                }
+                                encoderBufferInfo.presentationTimeUs =
+                                        Math.max(0, encoderBufferInfo.presentationTimeUs - firstPresentationUs);
+
+                                encodedData.position(encoderBufferInfo.offset);
+                                encodedData.limit(encoderBufferInfo.offset + encoderBufferInfo.size);
+                                muxer.writeSampleData(muxerTrackIndex, encodedData, encoderBufferInfo);
+                            }
+                        }
+                        if ((encoderBufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                            encoderEos = true;
+                        }
+                        encoder.releaseOutputBuffer(encoderStatus, false);
+                    }
+                } else if (decoderEos && pendingDecoderIndex < 0) {
+                    break;
                 }
             }
 
