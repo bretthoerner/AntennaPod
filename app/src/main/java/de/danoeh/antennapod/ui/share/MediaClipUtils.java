@@ -1,5 +1,7 @@
 package de.danoeh.antennapod.ui.share;
 
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaExtractor;
@@ -9,14 +11,30 @@ import android.net.Uri;
 import android.os.Build;
 import android.util.Log;
 
+import androidx.annotation.Nullable;
+
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 
 public class MediaClipUtils {
     private static final String TAG = "MediaClipUtils";
     private static final int DEFAULT_BUFFER_SIZE = 1024 * 1024;
     private static final long TIMEOUT_US = 5000L;
+
+    private static final int ATOM_MOOV = 0x6D6F6F76;
+    private static final int ATOM_MDAT = 0x6D646174;
+    private static final int ATOM_UDTA = 0x75647461;
+    private static final int ATOM_STCO = 0x7374636F;
+    private static final int ATOM_CO64 = 0x636F3634;
+    private static final int ATOM_TRAK = 0x7472616B;
+    private static final int ATOM_MDIA = 0x6D646961;
+    private static final int ATOM_MINF = 0x6D696E66;
+    private static final int ATOM_STBL = 0x7374626C;
+    private static final int ATOM_EDTS = 0x65647473;
 
     private MediaClipUtils() {
     }
@@ -420,5 +438,273 @@ public class MediaClipUtils {
                 }
             }
         }
+    }
+
+    public static boolean embedMetadata(File file, @Nullable byte[] imageBytes,
+                                        @Nullable String title, @Nullable String artist,
+                                        @Nullable String album) {
+        if (file == null || !file.exists()) {
+            return false;
+        }
+        byte[] udtaAtom = buildUdtaAtom(imageBytes, title, artist, album);
+        if (udtaAtom == null) {
+            return true;
+        }
+
+        File tempFile = new File(file.getAbsolutePath() + ".tmp");
+        try (RandomAccessFile in = new RandomAccessFile(file, "r");
+                RandomAccessFile out = new RandomAccessFile(tempFile, "rw")) {
+
+            long fileLen = in.length();
+            long pos = 0;
+            long moovPos = -1;
+            long moovSize = -1;
+            long mdatPos = -1;
+
+            while (pos + 8 <= fileLen) {
+                in.seek(pos);
+                int size = in.readInt();
+                int tag = in.readInt();
+                long actualSize;
+                if (size == 1) {
+                    actualSize = in.readLong();
+                } else if (size == 0) {
+                    actualSize = fileLen - pos;
+                } else {
+                    actualSize = size & 0xFFFFFFFFL;
+                }
+                if (actualSize <= 0) {
+                    break;
+                }
+                if (tag == ATOM_MOOV) {
+                    moovPos = pos;
+                    moovSize = actualSize;
+                } else if (tag == ATOM_MDAT) {
+                    mdatPos = pos;
+                }
+                pos += actualSize;
+            }
+
+            if (moovPos < 0 || moovSize <= 8 || moovSize > 50 * 1024 * 1024) {
+                Log.w(TAG, "Valid moov atom not found");
+                return false;
+            }
+
+            byte[] moovData = new byte[(int) moovSize];
+            in.seek(moovPos);
+            in.readFully(moovData);
+
+            ByteBuffer moovBb = ByteBuffer.wrap(moovData);
+            int childPos = 8;
+            int existingUdtaPos = -1;
+            int existingUdtaSize = 0;
+
+            while (childPos + 8 <= moovData.length) {
+                int s = moovBb.getInt(childPos);
+                if (s <= 0 || childPos + s > moovData.length) {
+                    break;
+                }
+                int t = moovBb.getInt(childPos + 4);
+                if (t == ATOM_UDTA) {
+                    existingUdtaPos = childPos;
+                    existingUdtaSize = s;
+                    break;
+                }
+                childPos += s;
+            }
+
+            int delta = udtaAtom.length - existingUdtaSize;
+            if (moovPos < mdatPos && delta != 0) {
+                updateChunkOffsets(moovData, 8, moovData.length, delta);
+            }
+
+            byte[] newMoovData = new byte[moovData.length + delta];
+            if (existingUdtaPos >= 0) {
+                System.arraycopy(moovData, 0, newMoovData, 0, existingUdtaPos);
+                System.arraycopy(udtaAtom, 0, newMoovData, existingUdtaPos, udtaAtom.length);
+                System.arraycopy(moovData, existingUdtaPos + existingUdtaSize, newMoovData,
+                        existingUdtaPos + udtaAtom.length, moovData.length - (existingUdtaPos + existingUdtaSize));
+            } else {
+                System.arraycopy(moovData, 0, newMoovData, 0, moovData.length);
+                System.arraycopy(udtaAtom, 0, newMoovData, moovData.length, udtaAtom.length);
+            }
+            ByteBuffer.wrap(newMoovData).putInt(0, newMoovData.length);
+
+            copyFileRange(in, out, 0, moovPos);
+            out.write(newMoovData);
+            copyFileRange(in, out, moovPos + moovSize, fileLen - (moovPos + moovSize));
+
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to embed metadata in audio clip", e);
+            if (tempFile.exists()) {
+                tempFile.delete();
+            }
+            return false;
+        }
+
+        if (tempFile.exists() && tempFile.length() > 0) {
+            if (file.delete() && tempFile.renameTo(file)) {
+                return true;
+            } else if (tempFile.renameTo(file)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void copyFileRange(RandomAccessFile in, RandomAccessFile out, long start, long length)
+            throws IOException {
+        if (length <= 0) {
+            return;
+        }
+        in.seek(start);
+        byte[] buf = new byte[64 * 1024];
+        long remaining = length;
+        while (remaining > 0) {
+            int toRead = (int) Math.min(buf.length, remaining);
+            int read = in.read(buf, 0, toRead);
+            if (read < 0) {
+                break;
+            }
+            out.write(buf, 0, read);
+            remaining -= read;
+        }
+    }
+
+    private static void updateChunkOffsets(byte[] buf, int start, int end, int delta) {
+        int p = start;
+        ByteBuffer bb = ByteBuffer.wrap(buf);
+        while (p + 8 <= end) {
+            int s = bb.getInt(p);
+            if (s <= 0 || p + s > end) {
+                break;
+            }
+            int tag = bb.getInt(p + 4);
+            if (tag == ATOM_STCO) {
+                int count = bb.getInt(p + 12);
+                for (int i = 0; i < count; i++) {
+                    int idx = p + 16 + i * 4;
+                    if (idx + 4 <= end) {
+                        int val = bb.getInt(idx);
+                        bb.putInt(idx, val + delta);
+                    }
+                }
+            } else if (tag == ATOM_CO64) {
+                int count = bb.getInt(p + 12);
+                for (int i = 0; i < count; i++) {
+                    int idx = p + 16 + i * 8;
+                    if (idx + 8 <= end) {
+                        long val = bb.getLong(idx);
+                        bb.putLong(idx, val + delta);
+                    }
+                }
+            } else if (tag == ATOM_TRAK || tag == ATOM_MDIA || tag == ATOM_MINF
+                    || tag == ATOM_STBL || tag == ATOM_EDTS) {
+                updateChunkOffsets(buf, p + 8, p + s, delta);
+            }
+            p += s;
+        }
+    }
+
+    @Nullable
+    private static byte[] buildUdtaAtom(@Nullable byte[] imageBytes,
+                                        @Nullable String title,
+                                        @Nullable String artist,
+                                        @Nullable String album) {
+        ByteArrayOutputStream ilstItems = new ByteArrayOutputStream();
+        try {
+            if (title != null && !title.isEmpty()) {
+                ilstItems.write(buildTextAtom(new byte[]{(byte) 0xA9, 'n', 'a', 'm'}, title));
+            }
+            if (artist != null && !artist.isEmpty()) {
+                ilstItems.write(buildTextAtom(new byte[]{(byte) 0xA9, 'A', 'R', 'T'}, artist));
+            }
+            if (album != null && !album.isEmpty()) {
+                ilstItems.write(buildTextAtom(new byte[]{(byte) 0xA9, 'a', 'l', 'b'}, album));
+            }
+            if (imageBytes != null && imageBytes.length > 0) {
+                byte[] covrAtom = buildCoverAtom(imageBytes);
+                if (covrAtom != null) {
+                    ilstItems.write(covrAtom);
+                }
+            }
+        } catch (IOException e) {
+            Log.e(TAG, "Error building ilst items", e);
+            return null;
+        }
+
+        byte[] ilstPayload = ilstItems.toByteArray();
+        if (ilstPayload.length == 0) {
+            return null;
+        }
+        byte[] ilstAtom = buildAtom(new byte[]{'i', 'l', 's', 't'}, ilstPayload);
+
+        ByteBuffer hdlr = ByteBuffer.allocate(33);
+        hdlr.putInt(33);
+        hdlr.put(new byte[]{'h', 'd', 'l', 'r'});
+        hdlr.putInt(0);
+        hdlr.putInt(0);
+        hdlr.put(new byte[]{'m', 'd', 'i', 'r'});
+        hdlr.put(new byte[]{'a', 'p', 'p', 'l'});
+        hdlr.putInt(0);
+        hdlr.putInt(0);
+        hdlr.put((byte) 0);
+        byte[] hdlrAtom = hdlr.array();
+
+        ByteBuffer metaPayload = ByteBuffer.allocate(4 + hdlrAtom.length + ilstAtom.length);
+        metaPayload.putInt(0);
+        metaPayload.put(hdlrAtom);
+        metaPayload.put(ilstAtom);
+
+        byte[] metaAtom = buildAtom(new byte[]{'m', 'e', 't', 'a'}, metaPayload.array());
+        return buildAtom(new byte[]{'u', 'd', 't', 'a'}, metaAtom);
+    }
+
+    @Nullable
+    private static byte[] buildCoverAtom(byte[] imageBytes) {
+        int type = 13;
+        if (imageBytes.length >= 8 && imageBytes[0] == (byte) 0x89 && imageBytes[1] == (byte) 0x50
+                && imageBytes[2] == (byte) 0x4E && imageBytes[3] == (byte) 0x47) {
+            type = 14;
+        } else if (!(imageBytes.length >= 2 && imageBytes[0] == (byte) 0xFF && imageBytes[1] == (byte) 0xD8)) {
+            try {
+                Bitmap bm = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
+                if (bm == null) {
+                    return null;
+                }
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                bm.compress(Bitmap.CompressFormat.JPEG, 90, baos);
+                bm.recycle();
+                imageBytes = baos.toByteArray();
+                type = 13;
+            } catch (Throwable t) {
+                Log.w(TAG, "Failed to decode cover image", t);
+                return null;
+            }
+        }
+        byte[] dataAtom = buildDataAtom(type, imageBytes);
+        return buildAtom(new byte[]{'c', 'o', 'v', 'r'}, dataAtom);
+    }
+
+    private static byte[] buildTextAtom(byte[] tagBytes, String text) {
+        byte[] textBytes = text.getBytes(StandardCharsets.UTF_8);
+        byte[] dataAtom = buildDataAtom(1, textBytes);
+        return buildAtom(tagBytes, dataAtom);
+    }
+
+    private static byte[] buildDataAtom(int dataType, byte[] data) {
+        ByteBuffer buf = ByteBuffer.allocate(8 + data.length);
+        buf.putInt(dataType);
+        buf.putInt(0);
+        buf.put(data);
+        return buildAtom(new byte[]{'d', 'a', 't', 'a'}, buf.array());
+    }
+
+    private static byte[] buildAtom(byte[] tagBytes, byte[] payload) {
+        ByteBuffer buf = ByteBuffer.allocate(8 + payload.length);
+        buf.putInt(8 + payload.length);
+        buf.put(tagBytes);
+        buf.put(payload);
+        return buf.array();
     }
 }
