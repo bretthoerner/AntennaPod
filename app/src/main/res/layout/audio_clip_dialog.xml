@@ -53,10 +53,44 @@
         android:id="@+id/txtvDuration"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="12dp"
+        android:layout_marginBottom="4dp"
         android:gravity="center_horizontal"
         android:text="@string/audio_clip_duration"
         style="@style/TextAppearance.Material3.BodySmall" />
+
+    <LinearLayout
+        android:id="@+id/layoutWindowControls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnWindowPrev"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/audio_clip_window_prev"
+            style="@style/Widget.Material3.Button.TextButton"
+            app:icon="@drawable/ic_fast_rewind" />
+
+        <TextView
+            android:id="@+id/txtvWindowRange"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            style="@style/TextAppearance.Material3.BodySmall" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnWindowNext"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/audio_clip_window_next"
+            style="@style/Widget.Material3.Button.TextButton"
+            app:icon="@drawable/ic_fast_forward"
+            app:iconGravity="end" />
+
+    </LinearLayout>
 
     <com.google.android.material.slider.RangeSlider
         android:id="@+id/rangeSlider"
