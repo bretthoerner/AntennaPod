@@ -42,8 +42,8 @@ import de.danoeh.antennapod.ui.episodes.ImageResourceUtils;
 public class AudioClipDialog extends BottomSheetDialogFragment {
     private static final String TAG = "AudioClipDialog";
     private static final String ARGUMENT_FEED_ITEM = "feedItem";
-    private static final int WINDOW_BACK_SEC = 2 * 60;
-    private static final int WINDOW_FORWARD_SEC = 60;
+    private static final int WINDOW_BACK_SEC = 60;
+    private static final int WINDOW_FORWARD_SEC = 15;
     private static final int WINDOW_INCREMENT_SEC = 60;
 
     private static final String ARGUMENT_FEED_ID = "feedId";
@@ -56,6 +56,7 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
     private Handler previewHandler = new Handler(Looper.getMainLooper());
     private Runnable previewRunnable;
     private boolean isPreviewPlaying = false;
+    private boolean isExporting = false;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private int totalDurationSec = 0;
     private int currentWindowStartSec = 0;
@@ -159,6 +160,58 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
             shiftWindow(currentWindowStartSec, newEnd);
         });
 
+        viewBinding.btnStartMinus.setOnClickListener(v -> {
+            if (isPreviewPlaying) {
+                stopPreview();
+            }
+            List<Float> values = viewBinding.rangeSlider.getValues();
+            int curStart = Math.round(values.get(0));
+            int curEnd = Math.round(values.get(1));
+            int newStart = Math.max(currentWindowStartSec, curStart - 1);
+            if (newStart < curEnd) {
+                viewBinding.rangeSlider.setValues((float) newStart, (float) curEnd);
+            }
+        });
+
+        viewBinding.btnStartPlus.setOnClickListener(v -> {
+            if (isPreviewPlaying) {
+                stopPreview();
+            }
+            List<Float> values = viewBinding.rangeSlider.getValues();
+            int curStart = Math.round(values.get(0));
+            int curEnd = Math.round(values.get(1));
+            int newStart = Math.min(curEnd - 1, curStart + 1);
+            if (newStart < curEnd) {
+                viewBinding.rangeSlider.setValues((float) newStart, (float) curEnd);
+            }
+        });
+
+        viewBinding.btnEndMinus.setOnClickListener(v -> {
+            if (isPreviewPlaying) {
+                stopPreview();
+            }
+            List<Float> values = viewBinding.rangeSlider.getValues();
+            int curStart = Math.round(values.get(0));
+            int curEnd = Math.round(values.get(1));
+            int newEnd = Math.max(curStart + 1, curEnd - 1);
+            if (newEnd > curStart) {
+                viewBinding.rangeSlider.setValues((float) curStart, (float) newEnd);
+            }
+        });
+
+        viewBinding.btnEndPlus.setOnClickListener(v -> {
+            if (isPreviewPlaying) {
+                stopPreview();
+            }
+            List<Float> values = viewBinding.rangeSlider.getValues();
+            int curStart = Math.round(values.get(0));
+            int curEnd = Math.round(values.get(1));
+            int newEnd = Math.min(currentWindowEndSec, curEnd + 1);
+            if (newEnd > curStart) {
+                viewBinding.rangeSlider.setValues((float) curStart, (float) newEnd);
+            }
+        });
+
         viewBinding.rangeSlider.addOnChangeListener((slider, value, fromUser) -> {
             List<Float> values = slider.getValues();
             long curStartMs = (long) (values.get(0) * 1000);
@@ -205,6 +258,27 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
                 Converter.getDurationStringLong((int) endMs)));
         viewBinding.txtvDuration.setText(getString(R.string.audio_clip_duration,
                 Converter.getDurationStringLong((int) (endMs - startMs))));
+        updateTweakButtonStates();
+    }
+
+    private void updateTweakButtonStates() {
+        if (viewBinding == null) {
+            return;
+        }
+        if (isExporting) {
+            viewBinding.btnStartMinus.setEnabled(false);
+            viewBinding.btnStartPlus.setEnabled(false);
+            viewBinding.btnEndMinus.setEnabled(false);
+            viewBinding.btnEndPlus.setEnabled(false);
+            return;
+        }
+        List<Float> values = viewBinding.rangeSlider.getValues();
+        int curStart = Math.round(values.get(0));
+        int curEnd = Math.round(values.get(1));
+        viewBinding.btnStartMinus.setEnabled(curStart > currentWindowStartSec);
+        viewBinding.btnStartPlus.setEnabled(curStart < curEnd - 1);
+        viewBinding.btnEndMinus.setEnabled(curEnd > curStart + 1);
+        viewBinding.btnEndPlus.setEnabled(curEnd < currentWindowEndSec);
     }
 
     private void startPreview(String filePath, long startMs, long endMs) {
@@ -383,6 +457,7 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
         if (viewBinding == null) {
             return;
         }
+        isExporting = exporting;
         viewBinding.progressBar.setVisibility(exporting ? View.VISIBLE : View.GONE);
         viewBinding.btnExport.setEnabled(!exporting);
         viewBinding.btnExport.setText(exporting ? R.string.audio_clip_exporting : R.string.audio_clip_export);
@@ -391,6 +466,7 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
         viewBinding.rangeSlider.setEnabled(!exporting);
         viewBinding.btnWindowPrev.setEnabled(!exporting && currentWindowStartSec > 0);
         viewBinding.btnWindowNext.setEnabled(!exporting && currentWindowEndSec < totalDurationSec);
+        updateTweakButtonStates();
     }
 
     private void shiftWindow(int newStart, int newEnd) {
