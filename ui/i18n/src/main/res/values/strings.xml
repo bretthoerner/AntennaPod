@@ -950,6 +950,8 @@
     <string name="audio_clip_start_time">Start: %s</string>
     <string name="audio_clip_end_time">End: %s</string>
     <string name="audio_clip_duration">Duration: %s</string>
+    <string name="audio_clip_adjust_minus_1s">-1s</string>
+    <string name="audio_clip_adjust_plus_1s">+1s</string>
     <string name="audio_clip_window_prev">-1 min</string>
     <string name="audio_clip_window_next">+1 min</string>
     <string name="audio_clip_window_range">%1$s – %2$s</string>
