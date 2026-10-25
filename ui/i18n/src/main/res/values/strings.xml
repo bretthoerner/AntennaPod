@@ -958,6 +958,7 @@
     <string name="audio_clip_window_next">+1 min</string>
     <string name="audio_clip_window_range">%1$s – %2$s</string>
     <string name="audio_clip_preview">Preview</string>
+    <string name="audio_clip_preview_progress">%1$s / %2$s (-%3$s)</string>
     <string name="audio_clip_export">Export clip</string>
     <string name="audio_clip_exporting">Exporting clip…</string>
     <string name="audio_clip_error">Could not create audio clip</string>

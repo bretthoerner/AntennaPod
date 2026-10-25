@@ -295,6 +295,9 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
             mediaPlayer.start();
             isPreviewPlaying = true;
             viewBinding.btnPreview.setIconResource(R.drawable.ic_pause);
+            viewBinding.previewProgress.setVisibility(View.VISIBLE);
+            viewBinding.txtvPreviewProgress.setVisibility(View.VISIBLE);
+            updatePreviewProgress((int) startMs, startMs, endMs);
 
             previewRunnable = new Runnable() {
                 @Override
@@ -304,6 +307,7 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
                             if (mediaPlayer.getCurrentPosition() >= endMs || !mediaPlayer.isPlaying()) {
                                 stopPreview();
                             } else {
+                                updatePreviewProgress(mediaPlayer.getCurrentPosition(), startMs, endMs);
                                 previewHandler.postDelayed(this, 100);
                             }
                         } catch (Exception e) {
@@ -318,6 +322,21 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
             Log.e(TAG, "Error starting preview", e);
             stopPreview();
         }
+    }
+
+    private void updatePreviewProgress(int currentMs, long startMs, long endMs) {
+        if (viewBinding == null) {
+            return;
+        }
+        int elapsedMs = Math.max(0, (int) (currentMs - startMs));
+        int totalMs = Math.max(1, (int) (endMs - startMs));
+        int remainingMs = Math.max(0, totalMs - elapsedMs);
+        viewBinding.previewProgress.setMax(totalMs);
+        viewBinding.previewProgress.setProgress(Math.min(elapsedMs, totalMs));
+        viewBinding.txtvPreviewProgress.setText(getString(R.string.audio_clip_preview_progress,
+                Converter.getDurationStringLong(elapsedMs),
+                Converter.getDurationStringLong(totalMs),
+                Converter.getDurationStringLong(remainingMs)));
     }
 
     private void stopPreview() {
@@ -339,6 +358,9 @@ public class AudioClipDialog extends BottomSheetDialogFragment {
         }
         if (viewBinding != null) {
             viewBinding.btnPreview.setIconResource(R.drawable.ic_play_24dp);
+            viewBinding.previewProgress.setVisibility(View.INVISIBLE);
+            viewBinding.txtvPreviewProgress.setVisibility(View.INVISIBLE);
+            viewBinding.previewProgress.setProgress(0);
         }
     }
 
