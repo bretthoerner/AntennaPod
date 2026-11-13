@@ -63,28 +63,34 @@ public class FinalShareScreen extends EchoScreen {
     }
 
     private void share() {
-        try {
-            Bitmap bitmap = Bitmap.createBitmap(SHARE_SIZE, SHARE_SIZE, Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(bitmap);
-            background.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
-            background.draw(canvas);
-            viewBinding.backgroundImage.setImageDrawable(null);
-            viewBinding.backgroundImage.setImageDrawable(background);
-            File file = new File(UserPreferences.getDataFolder(null), "AntennaPodEcho.png");
-            FileOutputStream stream = new FileOutputStream(file);
-            bitmap.compress(Bitmap.CompressFormat.PNG, 90, stream);
-            stream.close();
-
-            Uri fileUri = FileProvider.getUriForFile(context, context.getString(R.string.provider_authority), file);
-            new ShareCompat.IntentBuilder(context)
-                    .setType("image/png")
-                    .addStream(fileUri)
-                    .setText(context.getString(R.string.echo_share, EchoConfig.RELEASE_YEAR))
-                    .setChooserTitle(R.string.share_file_label)
-                    .startChooser();
-        } catch (Exception e) {
-            e.printStackTrace();
+        Bitmap bitmap = Bitmap.createBitmap(SHARE_SIZE, SHARE_SIZE, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        background.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+        background.draw(canvas);
+        viewBinding.backgroundImage.setImageDrawable(null);
+        viewBinding.backgroundImage.setImageDrawable(background);
+        if (disposable != null) {
+            disposable.dispose();
         }
+        disposable = Observable.fromCallable(() -> {
+            File file = new File(UserPreferences.getDataFolder(null), "AntennaPodEcho.png");
+            try (FileOutputStream stream = new FileOutputStream(file)) {
+                bitmap.compress(Bitmap.CompressFormat.PNG, 90, stream);
+            }
+            return file;
+        })
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(file -> {
+                    Uri fileUri = FileProvider.getUriForFile(
+                            context, context.getString(R.string.provider_authority), file);
+                    new ShareCompat.IntentBuilder(context)
+                            .setType("image/png")
+                            .addStream(fileUri)
+                            .setText(context.getString(R.string.echo_share, EchoConfig.RELEASE_YEAR))
+                            .setChooserTitle(R.string.share_file_label)
+                            .startChooser();
+                }, error -> Log.e(TAG, Log.getStackTraceString(error)));
     }
 
     @Override

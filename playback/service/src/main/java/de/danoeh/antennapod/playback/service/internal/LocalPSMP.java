@@ -537,7 +537,7 @@ public class LocalPSMP extends PlaybackServiceMediaPlayer {
             mediaPlayer = null;
             playerStatus = PlayerStatus.STOPPED;
         }
-        androidAutoConnectionState.removeObserver(androidAutoConnectionObserver);
+        audioFocusCanceller.post(() -> androidAutoConnectionState.removeObserver(androidAutoConnectionObserver));
         isShutDown = true;
         abandonAudioFocus();
         releaseWifiLockIfNecessary();
